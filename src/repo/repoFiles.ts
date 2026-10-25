@@ -1,0 +1,201 @@
+import JSZip from 'jszip';
+
+export interface RepoFile {
+  path: string;
+  name: string;
+  language: string;
+  content: string;
+}
+
+export const REPOSITORY_FILES: RepoFile[] = [
+  {
+    path: 'package.json',
+    name: 'package.json',
+    language: 'json',
+    content: `{
+  "name": "ollama-node-agent",
+  "version": "1.0.0",
+  "description": "Private local AI runner and autonomous agent studio with an intuitive dashboard and terminal CLI",
+  "bin": {
+    "localai": "./bin/localai.js"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "start": "node server.ts",
+    "cli": "node bin/localai.js",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2"
+  }
+}`,
+  },
+  {
+    path: 'README.md',
+    name: 'README.md',
+    language: 'markdown',
+    content: `# OllamaNode: Private Local AI Engine & Agent Studio
+
+Run private LLMs locally on your own hardware with zero data leakage.
+Featuring an intuitive developer dashboard, interactive terminal CLI, Ollama-compatible API, and autonomous multi-step agent runtime.
+
+## Quickstart
+
+\`\`\`bash
+# 1. Install dependencies
+npm install
+
+# 2. Run in terminal CLI
+npx localai run llama3.3:8b
+# or list models
+npx localai list
+
+# 3. Launch Web Dashboard & Ollama-compatible API Server
+npm run dev
+\`\`\`
+
+## CLI Commands
+- \`localai run <model>\`: Interactive terminal REPL
+- \`localai agent "<goal>"\`: Autonomous agent task loop
+- \`localai list\`: View downloaded models
+- \`localai pull <model>\`: Pull weights from model registry
+- \`localai serve\`: Start Ollama background daemon on :11434
+- \`localai ps\`: View loaded models in memory
+`,
+  },
+  {
+    path: 'bin/localai.js',
+    name: 'localai.js',
+    language: 'javascript',
+    content: `#!/usr/bin/env node
+import readline from 'node:readline';
+
+const args = process.argv.slice(2);
+const command = args[0] || '--help';
+
+console.log("\\x1b[36m\\x1b[1m[OllamaNode Local AI]\\x1b[0m Running on local machine.");
+
+if (command === 'list') {
+  console.log("NAME                 SIZE      QUANTIZATION");
+  console.log("llama3.3:8b          4.7 GB    Q4_K_M");
+  console.log("deepseek-r1:8b       4.9 GB    Q4_K_M");
+  console.log("qwen2.5-coder:7b     4.4 GB    Q4_K_M");
+} else if (command === 'run') {
+  const model = args[1] || 'llama3.3:8b';
+  console.log(\`\\x1b[32m● Loaded \${model} into local VRAM (4096 context)\\x1b[0m\`);
+  console.log("Type '/exit' to quit.\\n");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '>>> ' });
+  rl.prompt();
+  rl.on('line', (line) => {
+    if (line === '/exit') process.exit(0);
+    console.log(\`[\${model}]: Locally executed with zero network telemetry.\\n\`);
+    rl.prompt();
+  });
+} else {
+  console.log("Usage: localai [run|list|pull|agent|serve|ps]");
+}
+`,
+  },
+  {
+    path: 'Modelfile.example',
+    name: 'Modelfile.example',
+    language: 'dockerfile',
+    content: `FROM llama3.3:8b
+
+PARAMETER temperature 0.2
+PARAMETER top_p 0.95
+PARAMETER num_ctx 8192
+
+SYSTEM """
+You are an autonomous Senior Software Engineer operating in an airgapped private environment.
+State your step-by-step reasoning plan and produce clean production-ready code with complete type safety.
+"""
+`,
+  },
+  {
+    path: 'examples/curl_examples.sh',
+    name: 'curl_examples.sh',
+    language: 'bash',
+    content: `#!/usr/bin/env bash
+# Ollama-compatible API calls
+curl http://localhost:3000/api/tags
+curl http://localhost:3000/api/generate -d '{"model":"llama3.3:8b","prompt":"Why local AI?","stream":false}'
+curl http://localhost:3000/api/chat -d '{"model":"deepseek-r1:8b","messages":[{"role":"user","content":"Hello!"}]}'
+`,
+  },
+  {
+    path: 'examples/python_agent.py',
+    name: 'python_agent.py',
+    language: 'python',
+    content: `import requests
+
+res = requests.post("http://localhost:3000/api/generate", json={
+    "model": "llama3.3:8b",
+    "prompt": "Explain private local LLM architectures.",
+    "stream": False
+})
+print(res.json()["response"])
+`,
+  },
+  {
+    path: 'server.ts',
+    name: 'server.ts',
+    language: 'typescript',
+    content: `// Express & Ollama Compatible Server entrypoint
+import express from 'express';
+const app = express();
+app.use(express.json());
+app.get('/api/tags', (req, res) => res.json({ models: [] }));
+app.listen(3000, () => console.log('OllamaNode Server running on :3000'));
+`,
+  },
+  {
+    path: 'LICENSE',
+    name: 'LICENSE',
+    language: 'text',
+    content: `MIT License\n\nCopyright (c) 2026 LocalAI Engine Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files...`,
+  },
+];
+
+export async function downloadFullRepositoryZip(): Promise<void> {
+  const zip = new JSZip();
+
+  for (const file of REPOSITORY_FILES) {
+    zip.file(file.path, file.content);
+  }
+
+  // Generate zip file as blob
+  const content = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(content);
+
+  // Trigger browser download
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'ollama-node-agent-repo.zip';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

@@ -1,0 +1,6 @@
+{
+  "name": "OllamaNode - Local Private AI Engine & Agent Studio",
+  "description": "Run private LLMs locally on your machine with an intuitive dashboard, interactive terminal CLI, autonomous agents, and exportable GitHub repository.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
