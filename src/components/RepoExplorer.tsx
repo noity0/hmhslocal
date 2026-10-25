@@ -36,12 +36,11 @@ export const RepoExplorer: React.FC = () => {
 
   const copyInstallCommand = () => {
     const cmd = `# Clone and install OllamaNode Local AI Engine
-git clone https://github.com/your-username/localai-engine.git
-cd localai-engine
+git clone https://github.com/noity0/hmhslocal.git
+cd hmhslocal
 npm install
 npm link
-localai list
-localai run llama3.3:8b`;
+codex`;
     navigator.clipboard.writeText(cmd);
     setCopiedCmd(true);
     setTimeout(() => setCopiedCmd(false), 2000);

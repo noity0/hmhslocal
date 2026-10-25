@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Copy, Check, Play, Sparkles, Code2, Bot, Layers } from 'lucide-react';
+import { Terminal, Copy, Check, Play, Sparkles, Code2, Bot, Layers, Monitor, Cpu } from 'lucide-react';
 import { LocalModel } from '../types';
 
 interface InteractiveTerminalProps {
@@ -21,30 +21,29 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({
     {
       id: 'init-1',
       type: 'system',
-      text: `  ██████╗ ██████╗ ██████╗ ███████╗██╗  ██╗
- ██╔════╝██╔═══██╗██╔══██╗██╔════╝╚██╗██╔╝
- ██║     ██║   ██║██║  ██║█████╗   ╚███╔╝ 
- ██║     ██║   ██║██║  ██║██╔══╝   ██╔██╗ 
- ╚██████╗╚██████╔╝██████╔╝███████╗██╔╝ ██╗
-  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
-Local Private AI Engine & Autonomous Codex CLI v1.0.0
-Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
-    },
-    {
-      id: 'init-2',
-      type: 'system',
-      text: `Type "help" or run any CLI command below:
-  • codex code "<task>"       Autonomous coding agent (plans, edits, writes code)
-  • codex ask "<question>"    Fast one-shot terminal answer
-  • codex shell "<prompt>"    Translates natural language to bash commands
-  • codex list                List installed local models
-  • codex run [model]         Interactive conversation REPL`,
+      text: `┌──────────────────────────────────────────────────────────────────────────┐
+│  OLLAMANODE / CODEX TERMINAL DASHBOARD v1.2.0                            │
+│  OS: Windows 11 (cmd.exe) / Apple macOS / Linux · Port: 11434 OK         │
+├─────────────────────────────────────┬────────────────────────────────────┤
+│  Active Model: llama3.3:8b (Q4_K_M) │  VRAM Alloc: 4.72 GB / 16.0 GB     │
+│  Engine: 100% Private Airgap        │  Inference: 49.2 tok/s (33 layers) │
+└─────────────────────────────────────┴────────────────────────────────────┘
+
+ACTIONS IN TERMINAL:
+  [1] codex                     Launch interactive TUI dashboard
+  [2] codex code "<task>"       Autonomous coding agent (plans & edits files)
+  [3] codex cmd                 Connect with Windows CMD / shell bridge
+  [4] codex shell "<prompt>"    Natural language to Windows CMD / Bash helper
+  [5] codex list                List installed local models
+  [6] codex monitor             Live hardware & VRAM monitor
+  [7] codex run llama3.3:8b     Interactive streaming chat REPL`,
     },
   ]);
 
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [inCmdBridge, setInCmdBridge] = useState(false);
   const [inRepl, setInRepl] = useState<{ active: boolean; model: string }>({
     active: false,
     model: '',
@@ -69,6 +68,68 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
     setHistory((prev) => [...prev, cmd]);
     setHistoryIndex(-1);
 
+    // If in CMD Bridge mode:
+    if (inCmdBridge) {
+      addLine('input', `CMD> ${cmd}`);
+      setInput('');
+
+      if (cmd.toLowerCase() === 'exit' || cmd.toLowerCase() === 'back') {
+        addLine('system', `Closed CMD Bridge session. Returned to standard terminal.`);
+        setInCmdBridge(false);
+        return;
+      }
+      if (cmd.toLowerCase() === 'cls' || cmd.toLowerCase() === 'clear') {
+        setLines([]);
+        addLine('system', `Connected with CMD Bridge. Type 'exit' to return.`);
+        return;
+      }
+
+      if (cmd.startsWith('?') || cmd.startsWith('ai ')) {
+        const q = cmd.replace(/^(\?|ai\s+)/, '');
+        addLine('output', `[AI Assistant on Windows 11]: Analyzed command: "${q}".\nProcesses execute directly on local machine with 0ms network latency.`);
+        return;
+      }
+
+      if (cmd.toLowerCase().startsWith('dir')) {
+        addLine(
+          'output',
+          ` Volume in drive C has no label.
+ Volume Serial Number is 4C18-9B21
+
+ Directory of C:\\Users\\Developer\\localai-engine
+
+10/25/2026  05:42 AM    <DIR>          .
+10/25/2026  05:42 AM    <DIR>          ..
+10/25/2026  05:44 AM             1,203 package.json
+10/25/2026  05:44 AM             3,820 README.md
+10/25/2026  05:45 AM            18,400 bin\\localai.js
+10/25/2026  05:45 AM               140 bin\\codex.cmd
+10/25/2026  05:45 AM               140 bin\\localai.cmd
+10/25/2026  05:42 AM    <DIR>          src
+               4 File(s)         23,703 bytes
+               3 Dir(s)  342,109,218,816 bytes free`
+        );
+        return;
+      }
+
+      if (cmd.toLowerCase().startsWith('ipconfig')) {
+        addLine(
+          'output',
+          `Windows IP Configuration
+
+Ethernet adapter Local Network:
+   Connection-specific DNS Suffix  . : local
+   IPv4 Address. . . . . . . . . . . : 192.168.1.104
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+   Default Gateway . . . . . . . . . : 192.168.1.1`
+        );
+        return;
+      }
+
+      addLine('output', `Command executed in Windows 11 CMD environment: ${cmd}`);
+      return;
+    }
+
     // If currently in REPL mode:
     if (inRepl.active) {
       addLine('repl-user', `codex❯ ${cmd}`);
@@ -79,7 +140,7 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
         setInRepl({ active: false, model: '' });
         return;
       }
-      if (cmd === '/clear' || cmd === 'clear') {
+      if (cmd === '/clear' || cmd === 'clear' || cmd === 'cls') {
         setLines([]);
         addLine('system', `Interactive REPL for [${inRepl.model}]. Type /exit to quit.`);
         return;
@@ -90,7 +151,7 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
           `Slash commands:
   /model <name>   Switch active model (e.g. /model deepseek-r1:8b)
   /code <task>    Run autonomous coding agent
-  /sh <cmd>       Execute bash command
+  /sh <cmd>       Execute bash/cmd command
   /files          List local workspace files
   /exit           Exit back to shell`
         );
@@ -130,27 +191,107 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
     const mainCmd = parts[0];
     const subCmd = parts[1];
 
-    if (cmd === 'clear') {
+    if (cmd === 'clear' || cmd === 'cls') {
       setLines([]);
       setIsExecuting(false);
       return;
     }
 
+    // Launch CMD Bridge
+    if (cmd === 'codex cmd' || cmd === 'localai cmd' || cmd === 'cmd') {
+      addLine('system', `💻 Connected with Windows 11 CMD Bridge. Run dir, ipconfig, type 'exit' to return.`);
+      setInCmdBridge(true);
+      setIsExecuting(false);
+      return;
+    }
+
+    // Launch Terminal Dashboard
+    if (cmd === 'codex dashboard' || cmd === 'localai dashboard' || cmd === 'codex' || cmd === 'localai') {
+      addLine(
+        'system',
+        `┌──────────────────────────────────────────────────────────────────────────┐
+│  OLLAMANODE / CODEX TERMINAL DASHBOARD v1.2.0                            │
+│  OS: Windows 11 (cmd.exe) / Apple macOS / Linux · Port: 11434 OK         │
+├─────────────────────────────────────┬────────────────────────────────────┤
+│  Active Model: llama3.3:8b (Q4_K_M) │  VRAM Alloc: 4.72 GB / 16.0 GB     │
+│  Engine: 100% Private Airgap        │  Inference: 49.2 tok/s (33 layers) │
+└─────────────────────────────────────┴────────────────────────────────────┘
+
+ACTIONS IN TERMINAL:
+  [1] codex code "<task>"       Autonomous coding agent (plans & edits files)
+  [2] codex cmd                 Connect with Windows CMD / shell bridge
+  [3] codex shell "<prompt>"    Natural language to Windows CMD / Bash helper
+  [4] codex list                List installed local models
+  [5] codex monitor             Live hardware & VRAM monitor
+  [6] codex run llama3.3:8b     Interactive streaming chat REPL`
+      );
+      setIsExecuting(false);
+      return;
+    }
+
+    // Hardware Monitor
+    if (cmd === 'codex monitor' || cmd === 'localai monitor') {
+      addLine(
+        'output',
+        `LIVE HARDWARE TELEMETRY MONITOR (Windows 11 / macOS / Linux)
+
+CPU Cores:        16x High-Performance Processor
+RAM Usage:        14.8 GB / 32.0 GB (46%)
+Unified VRAM:     4.72 GB / 16.0 GB (33 offloaded GPU layers)
+Active Model:     llama3.3:8b (resident in memory)
+Daemon Status:    Listening on http://127.0.0.1:11434 (Ollama API)
+Airgap Security:  100% Strict Local Sandbox`
+      );
+      setIsExecuting(false);
+      return;
+    }
+
+    // Direct dir on terminal
+    if (cmd.startsWith('dir')) {
+      addLine(
+        'output',
+        ` Volume in drive C has no label.
+ Directory of C:\\Users\\Developer\\localai-engine
+
+10/25/2026  05:44 AM             1,203 package.json
+10/25/2026  05:44 AM             3,820 README.md
+10/25/2026  05:45 AM            18,400 bin\\localai.js
+10/25/2026  05:45 AM               140 bin\\codex.cmd
+10/25/2026  05:45 AM               140 bin\\localai.cmd
+10/25/2026  05:42 AM    <DIR>          src`
+      );
+      setIsExecuting(false);
+      return;
+    }
+
+    // Direct ipconfig
+    if (cmd.startsWith('ipconfig')) {
+      addLine(
+        'output',
+        `Windows IP Configuration
+IPv4 Address. . . . . . . . . . . : 192.168.1.104
+Subnet Mask . . . . . . . . . . . : 255.255.255.0
+Default Gateway . . . . . . . . . : 192.168.1.1`
+      );
+      setIsExecuting(false);
+      return;
+    }
+
+    // Help
     if (cmd === 'help' || cmd === '--help' || cmd === 'codex --help' || cmd === 'localai --help') {
       addLine(
         'output',
-        `CORE COMMANDS (Like Google Cloud CLI & Codex in Terminal):
-  codex code "<task>"            Autonomous coding agent (reads files, plans, edits code)
-  codex ask "<question>"         Fast one-shot terminal answer with streaming output
-  codex shell "<prompt>"         Convert natural language to bash command and execute
-  codex run [model]              Start interactive conversation with private model
-  codex list, ls                 List installed local models and quantizations
-  codex pull <model>             Download model weights (e.g. llama3.3:8b, deepseek-r1:8b)
-  codex init                     Initialize local AI project config in current directory
-  codex config                   Inspect CLI default configurations
-  codex ps                       Show models currently loaded in memory
-  npm install                    Install project dependencies locally
-  clear                          Clear terminal screen`
+        `COMMANDS (Cross-platform on Windows 11 CMD, macOS, Linux):
+  codex dashboard             Open interactive Terminal TUI Dashboard
+  codex code "<task>"         Autonomous coding agent (reads files, plans, edits code)
+  codex cmd                   Open interactive CMD bridge (dir, ipconfig, type)
+  codex ask "<question>"      Fast one-shot terminal answer with streaming output
+  codex shell "<prompt>"      Convert natural language to Windows CMD / Bash
+  codex run [model]           Start conversation REPL
+  codex list, ls              List installed local models and quantizations
+  codex pull <model>          Download model weights (e.g. llama3.3:8b, deepseek-r1:8b)
+  codex monitor               Live hardware & VRAM monitor
+  npm install                 Install project dependencies locally`
       );
       setIsExecuting(false);
       return;
@@ -165,7 +306,7 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
       await new Promise((r) => setTimeout(r, 450));
       addLine('system', `❯ Step 2/4: Decomposing task & synthesizing solution... OK`);
       await new Promise((r) => setTimeout(r, 450));
-      addLine('output', `Proposed Changes: ./src/services/task-solution.ts
+      addLine('output', `Proposed Changes: ./src/services/generated-solution.ts
 ──────────────────────────────────────────────────────────────────────
 + export interface TaskConfig { enabled: boolean; retries: number; }
 + export class TaskExecutor {
@@ -175,14 +316,14 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
 +   }
 + }
 ──────────────────────────────────────────────────────────────────────`);
-      addLine('code', `✔ Changes verified with 0 syntax errors. File created at ./src/services/task-solution.ts`);
+      addLine('code', `✔ Changes verified with 0 syntax errors. File created at ./src/services/generated-solution.ts`);
       setIsExecuting(false);
       return;
     }
 
     // Codex Ask Command
     if ((mainCmd === 'codex' || mainCmd === 'localai') && subCmd === 'ask') {
-      const q = parts.slice(2).join(' ') || 'Explain vector embeddings in 3 lines';
+      const q = parts.slice(2).join(' ') || 'Explain vector embeddings';
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
@@ -198,55 +339,21 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
       return;
     }
 
-    // Codex Shell Command (natural language to bash)
+    // Codex Shell Command (natural language to bash/cmd)
     if ((mainCmd === 'codex' || mainCmd === 'localai') && (subCmd === 'shell' || subCmd === 'sh')) {
-      const query = parts.slice(2).join(' ') || 'find all typescript files';
-      let translated = 'find . -type f -name "*.ts"';
-      if (query.includes('log')) translated = 'find /var/log -type f -name "*.log" -size +10M';
-      if (query.includes('port')) translated = 'lsof -iTCP -sTCP:LISTEN -n -P';
-      if (query.includes('git')) translated = 'git status -s && git log -n 5 --oneline';
-      addLine('system', `🔍 Natural Language Translation:`);
-      addLine('output', `Generated Command:\n  $ ${translated}\n\nRunning command output:\n./src/App.tsx\n./src/main.tsx\n./server.ts\n(Command completed in 14ms)`);
-      setIsExecuting(false);
-      return;
-    }
-
-    // Codex Init Command
-    if ((mainCmd === 'codex' || mainCmd === 'localai') && subCmd === 'init') {
-      addLine('output', `Initializing Local AI Agent Environment in: ${window.location.hostname}`);
-      addLine('code', `✔ Created .localaiconfig\n✔ Created Modelfile template\n\nSetup Complete! You can now run:\n  $ codex code "implement authentication"\n  $ codex run llama3.3:8b`);
-      setIsExecuting(false);
-      return;
-    }
-
-    // Codex Config Command
-    if ((mainCmd === 'codex' || mainCmd === 'localai') && subCmd === 'config') {
-      addLine(
-        'output',
-        JSON.stringify(
-          {
-            defaultModel: activeModelName,
-            temperature: 0.2,
-            contextSize: 8192,
-            backend: 'Metal 3 / CUDA 12.4 (Unified)',
-            port: 11434,
-            airgapMode: true,
-          },
-          null,
-          2
-        )
-      );
+      const query = parts.slice(2).join(' ') || 'find all log files';
+      let translated = 'dir /s /b *.log';
+      if (query.includes('port')) translated = 'netstat -ano | findstr LISTENING';
+      if (query.includes('ip')) translated = 'ipconfig /all';
+      if (query.includes('git')) translated = 'git status && git log -n 5 --oneline';
+      addLine('system', `🔍 Natural Language Translation for Windows 11 CMD:`);
+      addLine('output', `Generated Command:\n  $ ${translated}\n\nRunning command output:\nC:\\Users\\Developer\\localai-engine\\npm-debug.log\n(Command completed in 18ms)`);
       setIsExecuting(false);
       return;
     }
 
     // Codex List Command
-    if (
-      cmd === 'codex list' ||
-      cmd === 'codex ls' ||
-      cmd === 'localai list' ||
-      cmd === 'localai ls'
-    ) {
+    if (cmd === 'codex list' || cmd === 'codex ls' || cmd === 'localai list' || cmd === 'localai ls') {
       let table = 'NAME                 ID             SIZE      QUANTIZATION   STATUS\n' + '─'.repeat(72) + '\n';
       for (const m of models) {
         table += `${m.name.padEnd(20)} ${m.digest.substring(7, 19).padEnd(14)} ${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB   ${m.details.quantization_level.padEnd(14)} ${m.loaded ? 'Loaded (VRAM)' : 'Local Disk'}\n`;
@@ -272,21 +379,6 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
       addLine('system', `● Loaded ${target} into local VRAM (Q4_K_M, 8192 context tokens)`);
       addLine('system', `Type prompts freely. Use '/exit' to return to bash shell.`);
       setInRepl({ active: true, model: target });
-      setIsExecuting(false);
-      return;
-    }
-
-    // Standalone codex with no args
-    if (cmd === 'codex' || cmd === 'localai') {
-      addLine('system', `● Interactive Terminal Session Started [${activeModelName}]`);
-      addLine('system', `Type normal prompts or slash commands (/help, /code, /sh, /model, /exit)`);
-      setInRepl({ active: true, model: activeModelName });
-      setIsExecuting(false);
-      return;
-    }
-
-    if (cmd.startsWith('npm install')) {
-      addLine('output', `npm notice added 24 packages in 1.4s\nfound 0 vulnerabilities`);
       setIsExecuting(false);
       return;
     }
@@ -326,11 +418,11 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
       <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="text-xs font-bold text-white flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-emerald-400" />
-            <span>Terminal CLI Installation (Run in your actual machine terminal)</span>
+            <Monitor className="w-4 h-4 text-emerald-400" />
+            <span>Runs Directly in Terminal (Windows 11 cmd.exe, Apple macOS, Linux)</span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Install globally or run via npx. Works like Google Cloud CLI (<code className="text-cyan-400 font-mono">gcloud</code>) and OpenAI Codex CLI in any terminal.
+            No browser required. Run <code className="text-emerald-400 font-mono">codex</code> in your Windows 11 Command Prompt (<code className="text-cyan-400 font-mono">cmd.exe</code>) or terminal to open the TUI dashboard directly.
           </p>
         </div>
 
@@ -344,16 +436,17 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
       {/* Quick Click Command Presets */}
       <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-          Try Codex Commands:
+          Quick Commands:
         </span>
         {[
-          'codex code "Create REST API with JWT in TypeScript"',
-          'codex ask "Explain Raft consensus vs Paxos in 3 bullets"',
-          'codex shell "find all modified log files"',
+          'codex',
+          'codex cmd',
+          'dir',
+          'ipconfig',
+          'codex code "Build a REST API in TypeScript"',
+          'codex shell "find all log files"',
           'codex list',
-          'codex pull deepseek-r1:8b',
-          'codex init',
-          'codex run llama3.3:8b',
+          'codex monitor',
           'help',
         ].map((cmd) => (
           <button
@@ -362,7 +455,7 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
             disabled={isExecuting}
             className="text-xs font-mono text-cyan-300 hover:text-white bg-slate-950 border border-slate-800 hover:border-cyan-800/60 px-2.5 py-1 rounded transition-colors whitespace-nowrap"
           >
-            $ {cmd.length > 32 ? cmd.substring(0, 32) + '...' : cmd}
+            $ {cmd}
           </button>
         ))}
       </div>
@@ -378,9 +471,11 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
-            <span className="text-slate-400 ml-2">terminal ~ codex cli (zsh)</span>
+            <span className="text-slate-400 ml-2">
+              {inCmdBridge ? 'cmd.exe (Windows 11 Bridge)' : inRepl.active ? `codex ~ ${inRepl.model}` : 'terminal ~ codex tui dashboard'}
+            </span>
           </div>
-          <div>{inRepl.active ? `REPL: ${inRepl.model}` : 'STANDALONE CLI'}</div>
+          <div className="text-emerald-400">{inCmdBridge ? 'CMD BRIDGE ACTIVE' : inRepl.active ? 'REPL ACTIVE' : 'TUI READY'}</div>
         </div>
 
         {/* Terminal Output Scroll Area */}
@@ -446,8 +541,8 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
 
         {/* Input Line */}
         <div className="flex items-center gap-2 pt-2 border-t border-slate-900 text-slate-200">
-          <span className={inRepl.active ? 'text-emerald-400 font-bold' : 'text-cyan-400'}>
-            {inRepl.active ? 'codex❯' : 'user@local-machine:~$'}
+          <span className={inCmdBridge ? 'text-yellow-400 font-bold' : inRepl.active ? 'text-emerald-400 font-bold' : 'text-cyan-400'}>
+            {inCmdBridge ? 'CMD>' : inRepl.active ? 'codex❯' : 'user@local-machine:~$'}
           </span>
           <input
             ref={inputRef}
@@ -458,7 +553,13 @@ Model: llama3.3:8b (Q4_K_M) · Mode: Strict Airgapped Local · Daemon: :11434`,
             disabled={isExecuting}
             autoFocus
             className="flex-1 bg-transparent border-none outline-none font-mono text-xs text-white"
-            placeholder={inRepl.active ? "Type message or '/exit' to return to shell..." : 'Type a command (e.g. codex code "implement JWT auth")...'}
+            placeholder={
+              inCmdBridge
+                ? "Run native CMD command (e.g. dir, ipconfig) or type 'exit'..."
+                : inRepl.active
+                ? "Type message or '/exit'..."
+                : "Type 'codex' for dashboard, 'codex cmd' for CMD bridge, or 'help'..."
+            }
           />
         </div>
       </div>

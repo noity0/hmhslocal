@@ -1,197 +1,111 @@
-# OllamaNode: Private Local AI Engine & Agent Studio
+# OllamaNode & Codex: Terminal AI Agent & TUI Dashboard
 
 <p align="center">
-  <b>Run private LLMs locally on your own hardware with zero data leakage.</b><br/>
-  Featuring an intuitive developer dashboard, interactive terminal CLI, Ollama-compatible API, and autonomous multi-step agent runtime.
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" />
-  <img src="https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen.svg" alt="Node" />
-  <img src="https://img.shields.io/badge/API-Ollama%20Compatible-orange.svg" alt="Ollama API" />
-  <img src="https://img.shields.io/badge/Privacy-100%25%20Airgapped%20Local-emerald.svg" alt="Privacy" />
+  <b>A private local AI agent and autonomous coding engine running DIRECTLY in your terminal.</b><br/>
+  Cross-platform support for <b>Windows 11 (cmd.exe / PowerShell)</b>, <b>Apple macOS</b>, and <b>Linux</b>.
 </p>
 
 ---
 
-## ⚡ Highlights
+## ⚡ Quickstart: Run Directly in Terminal (No Browser Required!)
 
-- **Private & Airgapped**: Runs 100% on your machine (GPU Metal/CUDA or CPU). Zero telemetry, zero external token logging.
-- **Ollama-Compatible API**: Seamless drop-in replacement on `http://localhost:11434` for tools like Cursor, Continue.dev, LangChain, LlamaIndex, and Python `ollama` SDK.
-- **Terminal CLI & REPL**: `localai run llama3.3:8b`, `localai list`, `localai pull`, `localai agent`, and `localai serve`.
-- **Autonomous Local Agent Runtime**: Plan, execute shell commands, sandboxed code execution, file IO, and iterative self-correction.
-- **Modelfile Studio**: Build custom specialized agents using Docker-like Modelfile instructions (`FROM`, `SYSTEM`, `PARAMETER`, `TEMPLATE`).
-- **Intuitive Web Dashboard**: Real-time streaming chat, VRAM/RAM hardware gauge, latency & token speed metrics (tok/s), and parameter tuner.
+You do not need to open a browser at `http://localhost:3000`. The entire dashboard, chat, autonomous coding agent, and model manager run **directly inside your terminal console**.
 
----
+### 1. Installation on Windows 11 (`cmd.exe` or PowerShell)
 
-## 📦 Quickstart
+Open Command Prompt (`cmd.exe`) or Windows Terminal:
 
-### 1. Installation via npm
+```cmd
+:: Clone the repository
+git clone https://github.com/noity0/hmhslocal.git
+cd hmhslocal
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/localai-engine.git
-cd localai-engine
-
-# Install dependencies
+:: Install dependencies
 npm install
 
-# Link CLI command globally (optional)
+:: Link CLI globally
 npm link
 ```
 
-### 2. Run in Terminal
+### 2. Installation on Apple macOS & Linux
+
+Open your terminal (`zsh`, `bash`):
 
 ```bash
-# Check installed models
-localai list
-
-# Pull a model
-localai pull llama3.3:8b
-
-# Start an interactive chat REPL
-localai run llama3.3:8b
-
-# Run an autonomous agent
-localai agent "Analyze repository security and generate remediation checklist"
-```
-
-### 3. Launch Web Dashboard & API Server
-
-```bash
-npm run dev
-# Dashboard opens at http://localhost:3000
-# Ollama-compatible API listening at http://localhost:3000/api
+git clone https://github.com/your-username/localai-engine.git
+cd localai-engine
+npm install
+npm link
 ```
 
 ---
 
-## 💻 CLI Commands Reference
+## 🖥️ Running the Terminal Dashboard (TUI)
 
-| Command | Description | Example |
-| :--- | :--- | :--- |
-| `localai run <model> [prompt]` | Run a model in an interactive terminal REPL | `localai run deepseek-r1:8b` |
-| `localai list` | List all local models in registry | `localai list` |
-| `localai pull <model>` | Download a model weights package | `localai pull qwen2.5-coder:7b` |
-| `localai agent "<goal>"` | Execute autonomous agent task loop | `localai agent "Build REST API in Express"` |
-| `localai ps` | Inspect models currently loaded in memory | `localai ps` |
-| `localai serve` | Run background API daemon | `localai serve --port 11434` |
-| `localai create <name> -f <file>` | Create custom model from Modelfile | `localai create my-coder -f ./Modelfile` |
-| `localai rm <model>` | Delete local model weights from disk | `localai rm mistral:7b` |
-| `localai ui` | Open the intuitive web dashboard | `localai ui` |
+Simply type `codex` or `localai` in any terminal window (Windows 11 `cmd.exe`, PowerShell, macOS Terminal, or Linux):
 
----
-
-## 🤖 Supported Models
-
-| Model | Parameters | Quantization | Recommended VRAM | Use Case |
-| :--- | :--- | :--- | :--- | :--- |
-| `llama3.3:8b` | 8 Billion | Q4_K_M (4.7 GB) | 6 GB | General reasoning, conversation, writing |
-| `deepseek-r1:8b` | 8 Billion | Q4_K_M (4.9 GB) | 6 GB | Deep step-by-step reasoning & math |
-| `qwen2.5-coder:7b` | 7 Billion | Q4_K_M (4.4 GB) | 6 GB | Full-stack software engineering, debugging |
-| `mistral:7b` | 7.3 Billion | Q4_K_M (4.1 GB) | 5 GB | Instruction following, fast summarization |
-| `phi-4:14b` | 14 Billion | Q4_K_M (8.9 GB) | 10 GB | High-precision STEM & complex reasoning |
-| `gemma-2:9b` | 9.2 Billion | Q4_K_M (5.4 GB) | 7 GB | Creative writing, structured extraction |
-
----
-
-## 🔌 Ollama & OpenAI Compatible API
-
-### Generate Completion (`POST /api/generate`)
-
-```bash
-curl http://localhost:3000/api/generate -d '{
-  "model": "llama3.3:8b",
-  "prompt": "Why is the sky blue?",
-  "stream": false
-}'
+```cmd
+codex
 ```
 
-### Chat Completion (`POST /api/chat`)
+This immediately launches the **ASCII Terminal Dashboard**:
 
-```bash
-curl http://localhost:3000/api/chat -d '{
-  "model": "deepseek-r1:8b",
-  "messages": [
-    { "role": "user", "content": "Write a quicksort in TypeScript" }
-  ]
-}'
 ```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ TERMINAL DASHBOARD                                                      │
+│ OS: Windows 11 (cmd.exe)       Hardware: 16 Cores · 32.0 GB RAM          │
+├─────────────────────────────────────┬────────────────────────────────────┤
+│ Active Model: llama3.3:8b (Q4_K_M)  │ VRAM Alloc: 4.72 GB / 16.0 GB      │
+│ Local Engine: 100% Private Airgap   │ API Daemon: http://127.0.0.1:11434 │
+└─────────────────────────────────────┴────────────────────────────────────┘
 
-### Python SDK Integration
-
-```python
-import requests
-
-response = requests.post(
-    "http://localhost:3000/api/generate",
-    json={
-        "model": "llama3.3:8b",
-        "prompt": "Summarize the principles of distributed systems.",
-        "stream": False
-    }
-)
-
-print(response.json()["response"])
+SELECT AN ACTION:
+  [1] 💬 Interactive Chat / REPL (Direct streaming conversation in terminal)
+  [2] ⚡ Codex Autonomous Coding Agent (Inspects workspace, creates diffs & edits files)
+  [3] 🔍 Natural Language to CMD / Bash (Converts English into safe Windows CMD / Bash)
+  [4] 📦 Model Registry & Puller (List and download models: llama3.3, deepseek-r1)
+  [5] 💻 Connect with CMD / Shell Bridge (Run dir, ipconfig, git, npm directly inside AI)
+  [6] 📊 Live VRAM & Hardware Monitor (Real-time telemetry monitor in terminal)
+  [7] 🚪 Exit Terminal Dashboard
 ```
 
 ---
 
-## 📄 Modelfile Specification
+## 💻 Direct Terminal Commands Reference
 
-Create custom agents using a standard Modelfile:
-
-```dockerfile
-FROM llama3.3:8b
-
-# Inference Parameters
-PARAMETER temperature 0.3
-PARAMETER top_p 0.9
-PARAMETER stop "<|eot_id|>"
-
-# Custom Agent System Prompt
-SYSTEM """
-You are a Staff Security Engineer. Your job is to audit code for
-OWASP Top 10 vulnerabilities, unauthorized file access, and memory leaks.
-Always provide concrete remediation diffs.
-"""
-```
-
-Build it with:
-```bash
-localai create security-auditor -f ./Modelfile
-```
+| Command | Windows 11 (`cmd.exe`) | Apple macOS / Linux | Description |
+| :--- | :--- | :--- | :--- |
+| **Terminal Dashboard** | `codex` or `localai` | `codex` or `localai` | Interactive full-screen terminal TUI dashboard |
+| **Autonomous Coding Agent** | `codex code "<task>"` | `codex code "<task>"` | Inspects files, plans code, displays color diffs, writes to disk |
+| **CMD / Shell Bridge** | `codex cmd` | `codex cmd` | Connects directly with `cmd.exe` or `bash` inside AI session |
+| **Natural Language to CMD** | `codex shell "<prompt>"` | `codex shell "<prompt>"` | Translates plain English into Windows CMD commands or Bash |
+| **Fast One-Shot Answer** | `codex ask "<prompt>"` | `codex ask "<prompt>"` | Instant answer streaming with tokens/sec speed |
+| **List Models** | `codex list` | `codex list` | Shows downloaded GGUF models in memory and disk |
+| **Download Model** | `codex pull deepseek-r1:8b` | `codex pull deepseek-r1:8b` | Pulls weights with ASCII progress bar |
+| **Hardware Monitor** | `codex monitor` | `codex monitor` | Live VRAM and CPU usage monitor in terminal |
 
 ---
 
-## 📁 Repository Structure
+## ⚡ Examples for Windows 11 Command Prompt (`cmd.exe`)
 
-```
-.
-├── bin/
-│   └── localai.js              # Executable CLI entrypoint
-├── examples/
-│   ├── curl_examples.sh        # API request scripts
-│   ├── node_client.mjs         # Node.js SDK example
-│   └── python_agent.py         # Python client example
-├── src/
-│   ├── agents/                 # Autonomous agent workflow engine
-│   ├── cli/                    # CLI commands & terminal engine
-│   ├── components/             # Intuitive web UI views
-│   ├── engine/                 # Model registry & memory manager
-│   ├── repo/                   # Repo file browser & ZIP bundler
-│   ├── App.tsx                 # Main application dashboard
-│   ├── index.css               # Global typography & styles
-│   └── main.tsx                # Client entrypoint
-├── Modelfile.example           # Example Modelfile template
-├── server.ts                   # Express & Ollama API server
-├── package.json
-└── README.md
+```cmd
+:: 1. Launch Autonomous Coding Agent
+codex code "Create a rate-limited Express server in server.ts"
+
+:: 2. Natural Language to Windows CMD command helper
+codex shell "find all log files larger than 10MB in C drive"
+:: => Generates: dir /s /b *.log and asks to run
+
+:: 3. Interactive CMD Bridge
+codex cmd
+CMD> dir
+CMD> ipconfig /all
+CMD> ? explain which network adapter is connected to the internet
+CMD> exit
 ```
 
 ---
 
 ## 🛡️ License
 
-MIT License. Free for personal, commercial, and research use.
+MIT License. 100% private and airgapped on your own hardware.

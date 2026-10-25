@@ -64,16 +64,18 @@ Featuring an intuitive developer dashboard, interactive terminal CLI, Ollama-com
 ## Quickstart
 
 \`\`\`bash
-# 1. Install dependencies
+# 1. Clone repository
+git clone https://github.com/noity0/hmhslocal.git
+cd hmhslocal
+
+# 2. Install dependencies
 npm install
 
-# 2. Run in terminal CLI
-npx localai run llama3.3:8b
-# or list models
-npx localai list
+# 3. Link CLI globally
+npm link
 
-# 3. Launch Web Dashboard & Ollama-compatible API Server
-npm run dev
+# 4. Run Terminal Dashboard
+codex
 \`\`\`
 
 ## CLI Commands
@@ -165,9 +167,39 @@ switch (command) {
 
   default:
     printBanner();
-    console.log("Usage: codex [code <task> | ask <prompt> | shell <query> | list | pull | run]");
+    console.log("Usage: codex [dashboard | code <task> | ask <prompt> | shell <query> | cmd | list | pull | run]");
     break;
 }
+`,
+  },
+  {
+    path: 'bin/codex.cmd',
+    name: 'codex.cmd',
+    language: 'bat',
+    content: `@ECHO off
+SETLOCAL
+CALL :find_dp0
+node "%dp0%\\localai.js" %*
+EXIT /b %ERRORLEVEL%
+
+:find_dp0
+SET dp0=%~dp0
+EXIT /b
+`,
+  },
+  {
+    path: 'bin/localai.cmd',
+    name: 'localai.cmd',
+    language: 'bat',
+    content: `@ECHO off
+SETLOCAL
+CALL :find_dp0
+node "%dp0%\\localai.js" %*
+EXIT /b %ERRORLEVEL%
+
+:find_dp0
+SET dp0=%~dp0
+EXIT /b
 `,
   },
   {
