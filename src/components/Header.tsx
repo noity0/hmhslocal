@@ -8,7 +8,7 @@ interface HeaderProps {
   activeModelName?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, activeModelName = 'llama3.3:8b' }) => {
+export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, activeModelName }) => {
   return (
     <header className="flex items-center justify-between gap-8 px-6 py-3.5 bg-[#090d16] border-b border-slate-800/80 sticky top-0 z-40">
       {/* Zone 1: Single text element wordmark in Plus Jakarta Sans */}
@@ -72,7 +72,9 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, activeM
       <div className="flex items-center gap-3 shrink-0">
         <div className="hidden lg:flex items-center gap-2 text-xs text-slate-400 font-mono">
           <span>Active:</span>
-          <span className="text-emerald-400 font-medium">{activeModelName}</span>
+          <span className={activeModelName ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
+            {activeModelName || 'None'}
+          </span>
         </div>
         <button
           onClick={() => downloadFullRepositoryZip()}

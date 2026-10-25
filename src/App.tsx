@@ -14,60 +14,11 @@ import { LocalModel, SystemStats } from './types';
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('terminal');
   const [stats, setStats] = useState<SystemStats | null>(null);
-  const [models, setModels] = useState<LocalModel[]>([
-    {
-      name: 'llama3.3:8b',
-      size: 4729118208,
-      digest: 'sha256:a718d2bf412e8b21714bc12690d56c4d7b51b3e15777ce02cae06e30018b105a',
-      modified_at: new Date(Date.now() - 3600000 * 48).toISOString(),
-      details: { format: 'gguf', family: 'llama', parameter_size: '8B', quantization_level: 'Q4_K_M' },
-      loaded: true,
-      vram_mb: 4720,
-      description: 'Meta Llama 3.3 8B Instruct with 128k context and tool support',
-    },
-    {
-      name: 'deepseek-r1:8b',
-      size: 4918239014,
-      digest: 'sha256:f892c4a9103e51241151ba4938a16db2c55490a1877cb1017e452179a633190b',
-      modified_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-      details: { format: 'gguf', family: 'qwen2', parameter_size: '8B', quantization_level: 'Q4_K_M' },
-      loaded: false,
-      vram_mb: 4950,
-      description: 'DeepSeek R1 reasoning model distilled from Llama 8B with chain-of-thought tokens',
-    },
-    {
-      name: 'qwen2.5-coder:7b',
-      size: 4421980000,
-      digest: 'sha256:28bc5f91e10260492160ae5280b59b12401889ca21469e7161b3698b488734e1',
-      modified_at: new Date(Date.now() - 3600000 * 140).toISOString(),
-      details: { format: 'gguf', family: 'qwen2', parameter_size: '7B', quantization_level: 'Q4_K_M' },
-      loaded: false,
-      vram_mb: 4410,
-      description: 'Alibaba Qwen 2.5 Coder optimized for coding, debugging, and terminal bash scripting',
-    },
-    {
-      name: 'mistral:7b',
-      size: 4128500000,
-      digest: 'sha256:61e88e884507b3d11b338e55e0037a8b417c8225d3a5ca853c0fae1b4bfa293c',
-      modified_at: new Date(Date.now() - 3600000 * 300).toISOString(),
-      details: { format: 'gguf', family: 'mistral', parameter_size: '7B', quantization_level: 'Q4_K_M' },
-      loaded: false,
-      vram_mb: 4100,
-      description: 'Mistral 7B Instruct v0.3 with sliding window attention',
-    },
-    {
-      name: 'phi-4:14b',
-      size: 8910000000,
-      digest: 'sha256:82b7c4a1029e00188b64e521096a56e7b42006351296bf1b6598c47b5901237a',
-      modified_at: new Date(Date.now() - 3600000 * 80).toISOString(),
-      details: { format: 'gguf', family: 'phi4', parameter_size: '14B', quantization_level: 'Q4_K_M' },
-      loaded: false,
-      vram_mb: 8850,
-      description: 'Microsoft Phi-4 14B state-of-the-art synthetic reasoning model',
-    },
-  ]);
+  const [models, setModels] = useState<LocalModel[]>([]);
+  const [isOffline, setIsOffline] = useState<boolean>(false);
+  const [offlineHint, setOfflineHint] = useState<string | null>(null);
 
-  const activeModel = models.find((m) => m.loaded) || models[0];
+  const activeModel = models.find((m) => m.loaded) || models[0] || null;
 
   const fetchStats = async () => {
     try {
@@ -75,9 +26,14 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setStats(data);
+        if (data.api_ready === false) {
+          setIsOffline(true);
+        } else {
+          setIsOffline(false);
+        }
       }
-    } catch (e) {
-      // offline/fallback
+    } catch {
+      setIsOffline(true);
     }
   };
 
@@ -86,61 +42,60 @@ export default function App() {
       const res = await fetch('/api/tags');
       if (res.ok) {
         const data = await res.json();
-        if (data.models && data.models.length > 0) {
-          setModels(data.models);
+        if (data.offline) {
+          setIsOffline(true);
+          setOfflineHint(data.hint || data.error || null);
+          setModels([]);
+        } else {
+          setIsOffline(false);
+          setOfflineHint(null);
+          setModels(Array.isArray(data.models) ? data.models : []);
         }
       }
-    } catch (e) {
-      // offline/fallback
+    } catch {
+      setIsOffline(true);
+      setModels([]);
     }
   };
 
   useEffect(() => {
     fetchStats();
     fetchModels();
-    const interval = setInterval(fetchStats, 5000);
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const handleLoadModel = async (name: string) => {
     try {
-      await fetch('/api/models/load', {
+      const res = await fetch('/api/models/load', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      setModels((prev) =>
-        prev.map((m) => ({
-          ...m,
-          loaded: m.name === name,
-        }))
-      );
-      fetchStats();
-    } catch (e) {
-      setModels((prev) =>
-        prev.map((m) => ({
-          ...m,
-          loaded: m.name === name,
-        }))
-      );
+      if (res.ok) {
+        await fetchModels();
+        await fetchStats();
+      }
+    } catch {
+      // offline
     }
   };
 
   const handleUnloadModel = async (name: string) => {
     try {
-      await fetch('/api/models/unload', {
+      const res = await fetch('/api/models/unload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      setModels((prev) =>
-        prev.map((m) => (m.name === name ? { ...m, loaded: false } : m))
-      );
-      fetchStats();
-    } catch (e) {
-      setModels((prev) =>
-        prev.map((m) => (m.name === name ? { ...m, loaded: false } : m))
-      );
+      if (res.ok) {
+        await fetchModels();
+        await fetchStats();
+      }
+    } catch {
+      // offline
     }
   };
 
@@ -166,7 +121,38 @@ export default function App() {
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8 max-w-[1440px] w-full mx-auto">
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8 max-w-[1440px] w-full mx-auto space-y-4">
+          {isOffline && (
+            <div className="bg-amber-950/40 border border-amber-800/80 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-200">
+              <div className="space-y-1">
+                <div className="text-xs font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span>Local Ollama Daemon Disconnected</span>
+                </div>
+                <p className="text-[11px] text-amber-300/80">
+                  {offlineHint || 'Ollama is not reachable at the configured address. Run `ollama serve` in a terminal or verify Settings.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    fetchStats();
+                    fetchModels();
+                  }}
+                  className="px-2.5 py-1 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-700/60 rounded transition-colors"
+                >
+                  Retry Connection
+                </button>
+                <button
+                  onClick={() => setCurrentTab('settings')}
+                  className="px-2.5 py-1 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded transition-colors"
+                >
+                  Configure Host
+                </button>
+              </div>
+            </div>
+          )}
+
           {currentTab === 'dashboard' && (
             <OverviewDashboard
               stats={stats}
@@ -180,7 +166,7 @@ export default function App() {
           {currentTab === 'playground' && (
             <ChatPlayground
               models={models}
-              activeModelName={activeModel?.name || 'llama3.3:8b'}
+              activeModelName={activeModel?.name || ''}
               onSelectModel={handleLoadModel}
             />
           )}
@@ -188,7 +174,7 @@ export default function App() {
           {currentTab === 'agents' && (
             <AgentStudio
               models={models}
-              activeModelName={activeModel?.name || 'llama3.3:8b'}
+              activeModelName={activeModel?.name || ''}
             />
           )}
 
@@ -204,7 +190,7 @@ export default function App() {
           {currentTab === 'terminal' && (
             <InteractiveTerminal
               models={models}
-              activeModelName={activeModel?.name || 'llama3.3:8b'}
+              activeModelName={activeModel?.name || ''}
             />
           )}
 

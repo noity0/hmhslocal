@@ -81,10 +81,10 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       }
       const durationMs = Math.round(performance.now() - startTime);
       const tokPerSec = +(tokenCount / (durationMs / 1000)).toFixed(1);
-      setBenchMetrics({ tokPerSec: tokPerSec > 0 ? tokPerSec : 46.2, durationMs, tokenCount });
-    } catch (err) {
-      setBenchOutput('Inference completed via local emulation engine.');
-      setBenchMetrics({ tokPerSec: 48.5, durationMs: 1120, tokenCount: 54 });
+      setBenchMetrics({ tokPerSec: tokPerSec > 0 ? tokPerSec : 0, durationMs, tokenCount });
+    } catch (err: any) {
+      setBenchOutput(`Benchmark failed: ${err.message || 'Cannot connect to model daemon'}. Ensure Ollama is running and a model is loaded.`);
+      setBenchMetrics(null);
     } finally {
       setBenchRunning(false);
     }
@@ -94,63 +94,70 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     <div className="space-y-6">
       {/* Top Banner / System Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* 1. Daemon Status */}
         <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-lg">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span>Daemon Status</span>
-            <span className="text-emerald-400 font-mono text-[11px]">PORT 11434</span>
+            <span className="text-slate-400 font-mono text-[11px]">PORT {stats?.daemon_listening_port || 11434}</span>
           </div>
-          <div className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>Active & Serving</span>
+          <div className={`text-xl font-bold tracking-tight flex items-center gap-2 ${stats?.api_ready ? 'text-emerald-400' : 'text-amber-400'}`}>
+            <span className={`w-2.5 h-2.5 rounded-full ${stats?.api_ready ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span>{stats?.api_ready ? 'Connected' : 'Offline'}</span>
           </div>
           <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-            <span>Ollama API</span>
+            <span>{stats?.version ? `v${stats.version}` : 'Ollama Offline'}</span>
             <span aria-hidden="true">·</span>
-            <span>OpenAI Compatible</span>
+            <span>REST API</span>
           </div>
         </div>
 
+        {/* 2. Loaded Model */}
         <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-lg">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
             <span>Loaded Model</span>
-            <span className="text-cyan-400 font-mono text-[11px]">VRAM READY</span>
+            <span className={activeModel ? 'text-cyan-400 font-mono text-[11px]' : 'text-slate-500 font-mono text-[11px]'}>
+              {activeModel?.loaded ? 'IN MEMORY' : 'DISK'}
+            </span>
           </div>
           <div className="text-xl font-bold text-white tracking-tight truncate">
-            {activeModel?.name || 'llama3.3:8b'}
+            {activeModel?.name || 'None'}
           </div>
           <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-            <span>{activeModel?.details?.quantization_level || 'Q4_K_M'}</span>
+            <span>{activeModel?.details?.quantization_level || 'GGUF'}</span>
             <span aria-hidden="true">·</span>
-            <span>{activeModel?.details?.parameter_size || '8B'}</span>
+            <span>{activeModel?.details?.parameter_size || 'Local Model'}</span>
           </div>
         </div>
 
+        {/* 3. Host System RAM */}
         <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-lg">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>VRAM Allocation</span>
-            <span className="text-slate-400 font-mono text-[11px]">METAL / CUDA</span>
+            <span>Host System RAM</span>
+            <span className="text-slate-400 font-mono text-[11px]">PHYSICAL</span>
           </div>
           <div className="text-xl font-bold text-white tracking-tight font-mono tabular-nums">
-            {stats?.allocated_vram_gb || 4.72} <span className="text-xs text-slate-400 font-normal">/ {stats?.total_vram_gb || 18} GB</span>
+            {stats ? `${stats.used_ram_gb}` : '--'} <span className="text-xs text-slate-400 font-normal">/ {stats ? `${stats.total_ram_gb} GB` : '-- GB'}</span>
           </div>
           <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-            <span>Unified Memory</span>
+            <span>{stats?.free_ram_gb !== undefined ? `Free: ${stats.free_ram_gb} GB` : 'Host Memory'}</span>
             <span aria-hidden="true">·</span>
-            <span>33 GPU Layers</span>
+            <span>OS Buffer</span>
           </div>
         </div>
 
+        {/* 4. Host Compute / Platform */}
         <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-lg">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Inference Velocity</span>
-            <span className="text-emerald-400 font-mono text-[11px]">REAL-TIME</span>
+            <span>Host Architecture</span>
+            <span className="text-slate-400 font-mono text-[11px]">COMPUTE</span>
           </div>
-          <div className="text-xl font-bold text-emerald-400 tracking-tight font-mono tabular-nums">
-            {stats?.inference_tok_s || 48.6} <span className="text-xs text-slate-400 font-normal">tok/s</span>
+          <div className="text-sm font-bold text-slate-200 tracking-tight truncate">
+            {stats?.device || 'Local Host'}
           </div>
           <div className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-            <span>Eval: 18ms/tok</span>
+            <span>Provider: {stats?.provider || 'ollama'}</span>
             <span aria-hidden="true">·</span>
-            <span>CPU: {stats?.cpu_usage_pct || 22}%</span>
+            <span>Local-First</span>
           </div>
         </div>
       </div>
@@ -230,59 +237,72 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Model</th>
-                    <th className="py-2.5 px-3">Quantization</th>
-                    <th className="py-2.5 px-3 text-right">Size</th>
-                    <th className="py-2.5 px-3 text-right">Status</th>
-                    <th className="py-2.5 px-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
-                  {models.map((model) => (
-                    <tr key={model.name} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3 px-3 font-medium text-white flex items-center gap-2">
-                        {model.loaded && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
-                        <span>{model.name}</span>
-                      </td>
-                      <td className="py-3 px-3 text-slate-400">
-                        {model.details.quantization_level}
-                      </td>
-                      <td className="py-3 px-3 text-right text-slate-300 tabular-nums">
-                        {(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        {model.loaded ? (
-                          <span className="text-emerald-400 font-sans text-[11px]">In VRAM</span>
-                        ) : (
-                          <span className="text-slate-500 font-sans text-[11px]">Disk</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        {model.loaded ? (
-                          <button
-                            onClick={() => onUnloadModel(model.name)}
-                            className="text-[11px] font-sans text-slate-400 hover:text-rose-400 transition-colors"
-                          >
-                            Unload
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => onLoadModel(model.name)}
-                            className="text-[11px] font-sans text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
-                          >
-                            Load
-                          </button>
-                        )}
-                      </td>
+            {models.length === 0 ? (
+              <div className="py-8 px-4 text-center border border-dashed border-slate-800 rounded-md my-3">
+                <p className="text-xs text-slate-400">No models found in your local Ollama repository.</p>
+                <p className="text-[11px] text-slate-500 mt-1">Pull a model via the Model Registry tab or run <code className="text-emerald-400">ollama pull llama3.2</code> in your terminal.</p>
+                <button
+                  onClick={() => onSelectTab('models')}
+                  className="mt-4 px-3.5 py-1.5 text-xs font-medium bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded transition-colors inline-block"
+                >
+                  Go to Model Registry
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      <th className="py-2.5 px-3">Model</th>
+                      <th className="py-2.5 px-3">Quantization</th>
+                      <th className="py-2.5 px-3 text-right">Size</th>
+                      <th className="py-2.5 px-3 text-right">Status</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
+                    {models.map((model) => (
+                      <tr key={model.name} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-3 px-3 font-medium text-white flex items-center gap-2">
+                          {model.loaded && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                          <span>{model.name}</span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-400">
+                          {model.details?.quantization_level || 'GGUF'}
+                        </td>
+                        <td className="py-3 px-3 text-right text-slate-300 tabular-nums">
+                          {model.size ? `${(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB` : 'N/A'}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {model.loaded ? (
+                            <span className="text-emerald-400 font-sans text-[11px]">In VRAM</span>
+                          ) : (
+                            <span className="text-slate-500 font-sans text-[11px]">Disk</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {model.loaded ? (
+                            <button
+                              onClick={() => onUnloadModel(model.name)}
+                              className="text-[11px] font-sans text-slate-400 hover:text-rose-400 transition-colors"
+                            >
+                              Unload
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => onLoadModel(model.name)}
+                              className="text-[11px] font-sans text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+                            >
+                              Load
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">

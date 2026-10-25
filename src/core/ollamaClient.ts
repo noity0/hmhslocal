@@ -200,6 +200,149 @@ To start Ollama:
   }
 
   /**
+   * Streaming Text generation
+   */
+  public async generateStream(
+    model: string,
+    prompt: string,
+    onChunk: (text: string, raw: any) => void,
+    options?: {
+      system?: string;
+      temperature?: number;
+      num_ctx?: number;
+      signal?: AbortSignal;
+    }
+  ): Promise<{ fullText: string; totalDurationMs: number }> {
+    const res = await fetch(`${this.baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt,
+        system: options?.system,
+        stream: true,
+        options: {
+          temperature: options?.temperature ?? 0.2,
+          num_ctx: options?.num_ctx ?? 8192,
+        },
+      }),
+      signal: options?.signal,
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`Ollama generate failed (HTTP ${res.status}): ${errBody || res.statusText}`);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Response body stream is not available');
+
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let totalDurationMs = 0;
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const chunk = JSON.parse(line);
+          const responseText = chunk.response || '';
+          if (responseText) {
+            fullText += responseText;
+            onChunk(responseText, chunk);
+          }
+          if (chunk.done) {
+            totalDurationMs = Math.round((chunk.total_duration || 0) / 1000000);
+          }
+        } catch {
+          // ignore partial json line
+        }
+      }
+    }
+
+    return { fullText, totalDurationMs };
+  }
+
+  /**
+   * Lists currently running/loaded models in Ollama via /api/ps
+   */
+  public async listRunning(signal?: AbortSignal): Promise<any[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/ps`, { signal });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.models as any[]) || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Inspects detailed information about a model via /api/show
+   */
+  public async showModel(modelName: string, signal?: AbortSignal): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/show`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: modelName }),
+      signal,
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to show model ${modelName} (HTTP ${res.status}): ${err}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Pre-loads a model into memory
+   */
+  public async loadModel(modelName: string): Promise<boolean> {
+    const res = await fetch(`${this.baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelName, prompt: '', keep_alive: -1 }),
+    });
+    return res.ok;
+  }
+
+  /**
+   * Unloads a model from memory
+   */
+  public async unloadModel(modelName: string): Promise<boolean> {
+    const res = await fetch(`${this.baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelName, keep_alive: 0 }),
+    });
+    return res.ok;
+  }
+
+  /**
+   * Deletes a model from Ollama storage via DELETE /api/delete
+   */
+  public async deleteModel(modelName: string): Promise<boolean> {
+    const res = await fetch(`${this.baseUrl}/api/delete`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: modelName }),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to delete model ${modelName} (HTTP ${res.status}): ${err}`);
+    }
+    return true;
+  }
+
+  /**
    * Pulls a model from Ollama registry with progress callback
    */
   public async pullModel(

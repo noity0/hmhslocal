@@ -35,18 +35,38 @@ export class WorkspaceSecurityError extends Error {
 
 export class WorkspaceManager {
   private readonly workspaceRoot: string;
+  private readonly realWorkspaceRoot: string;
 
   constructor(workspaceRoot?: string) {
     this.workspaceRoot = path.resolve(workspaceRoot || process.cwd());
+    try {
+      this.realWorkspaceRoot = fs.existsSync(this.workspaceRoot)
+        ? fs.realpathSync(this.workspaceRoot)
+        : this.workspaceRoot;
+    } catch {
+      this.realWorkspaceRoot = this.workspaceRoot;
+    }
   }
 
   public getRoot(): string {
     return this.workspaceRoot;
   }
 
+  private isWithinRoot(target: string, root: string): boolean {
+    const normTarget = process.platform === 'win32' ? path.normalize(target).toLowerCase() : path.normalize(target);
+    const normRoot = process.platform === 'win32' ? path.normalize(root).toLowerCase() : path.normalize(root);
+    if (normTarget === normRoot) return true;
+    const rel = path.relative(normRoot, normTarget);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  }
+
   /**
    * Safely resolves a path and asserts that it stays strictly within the workspaceRoot.
-   * Throws WorkspaceSecurityError if a path escapes the root.
+   * Defends against:
+   * - Null byte injection
+   * - Directory traversal (../../)
+   * - Windows drive letter switching & UNC escapes
+   * - Symlink & junction escapes via realpath checks
    */
   public resolveSafePath(userPath: string): string {
     const trimmed = (userPath || '').trim();
@@ -54,19 +74,53 @@ export class WorkspaceManager {
       return this.workspaceRoot;
     }
 
+    if (trimmed.includes('\0')) {
+      throw new WorkspaceSecurityError('Null byte detected in path');
+    }
+
     // Resolve relative to workspace root
     const resolved = path.isAbsolute(trimmed)
       ? path.resolve(trimmed)
       : path.resolve(this.workspaceRoot, trimmed);
 
-    // Normalize casing and separators
-    const relative = path.relative(this.workspaceRoot, resolved);
-
-    // If relative path starts with '..' or is root escape
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    // Lexical check
+    if (!this.isWithinRoot(resolved, this.workspaceRoot)) {
       throw new WorkspaceSecurityError(
         `Path traversal blocked: "${userPath}" resolves to "${resolved}", which is outside workspace root "${this.workspaceRoot}".`
       );
+    }
+
+    // Symlink / Junction containment check via realpath
+    if (fs.existsSync(resolved)) {
+      try {
+        const real = fs.realpathSync(resolved);
+        if (!this.isWithinRoot(real, this.realWorkspaceRoot)) {
+          throw new WorkspaceSecurityError(
+            `Symlink escape blocked: "${userPath}" points to "${real}", which is outside workspace root "${this.realWorkspaceRoot}".`
+          );
+        }
+      } catch (err: any) {
+        if (err instanceof WorkspaceSecurityError) throw err;
+      }
+    } else {
+      // For paths that do not exist yet (e.g. creating a new file), check closest existing parent
+      let current = path.dirname(resolved);
+      while (current && current !== path.dirname(current)) {
+        if (fs.existsSync(current)) {
+          try {
+            const realParent = fs.realpathSync(current);
+            if (!this.isWithinRoot(realParent, this.realWorkspaceRoot)) {
+              throw new WorkspaceSecurityError(
+                `Parent directory symlink escape blocked: "${userPath}" ancestor points to "${realParent}", which is outside workspace root "${this.realWorkspaceRoot}".`
+              );
+            }
+          } catch (err: any) {
+            if (err instanceof WorkspaceSecurityError) throw err;
+          }
+          break;
+        }
+        current = path.dirname(current);
+      }
     }
 
     return resolved;
@@ -245,16 +299,58 @@ export class WorkspaceManager {
   }
 
   /**
+   * Evaluates if a command poses an extreme security hazard (root deletion, disk format, pipe-to-shell)
+   */
+  public isDangerousCommand(command: string): { dangerous: boolean; reason?: string } {
+    const trimmed = (command || '').trim();
+    if (!trimmed) {
+      return { dangerous: true, reason: 'Command string is empty' };
+    }
+
+    const dangerousPatterns: Array<{ pattern: RegExp; reason: string }> = [
+      { pattern: /rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)\s+[/~]/i, reason: 'Recursive root directory wipe blocked' },
+      { pattern: /rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)\s+\.\.?(\s|$)/i, reason: 'Recursive workspace directory wipe blocked' },
+      { pattern: /rmdir\s+\/[sS]\s+\/[qQ]\s+([a-zA-Z]:\\?|\/)/i, reason: 'Windows recursive drive root wipe blocked' },
+      { pattern: /del\s+\/[fFqQsS\s]+([a-zA-Z]:\\?|\*.*)/i, reason: 'Unrestricted drive file wipe blocked' },
+      { pattern: /format\s+[a-zA-Z]:/i, reason: 'Drive format blocked' },
+      { pattern: /mkfs(\.[a-z0-9]+)?\s+/i, reason: 'Filesystem formatting blocked' },
+      { pattern: /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, reason: 'Fork bomb blocked' },
+      { pattern: /(curl|wget)\s+.*\|\s*(ba)?sh/i, reason: 'Piped remote script download cradle blocked' },
+      { pattern: /powershell(\.exe)?\s+.*-[eE](nc(odedcommand)?)?\s+/i, reason: 'Obfuscated PowerShell cradle blocked' },
+    ];
+
+    for (const p of dangerousPatterns) {
+      if (p.pattern.test(trimmed)) {
+        return { dangerous: true, reason: p.reason };
+      }
+    }
+
+    return { dangerous: false };
+  }
+
+  /**
    * Executes an approved shell command strictly in workspace directory with timeout.
    */
   public runCommand(command: string, timeoutMs = 30000): Promise<CommandExecutionResult> {
     return new Promise((resolve) => {
+      const trimmed = (command || '').trim();
+      const danger = this.isDangerousCommand(trimmed);
+      if (danger.dangerous) {
+        return resolve({
+          command: trimmed,
+          exitCode: 126,
+          stdout: '',
+          stderr: `Security policy blocked command: ${danger.reason}`,
+          durationMs: 0,
+        });
+      }
+
       const startTime = Date.now();
       const isWindows = process.platform === 'win32';
       const shell = isWindows ? 'cmd.exe' : '/bin/sh';
 
       exec(
-        command,
+        trimmed,
         {
           cwd: this.workspaceRoot,
           timeout: timeoutMs,
@@ -265,7 +361,7 @@ export class WorkspaceManager {
         (error: ExecException | null, stdout, stderr) => {
           const durationMs = Date.now() - startTime;
           resolve({
-            command,
+            command: trimmed,
             exitCode: error ? (error.code ?? 1) : 0,
             stdout: stdout.toString(),
             stderr: stderr.toString(),

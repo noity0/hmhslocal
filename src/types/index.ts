@@ -10,24 +10,26 @@ export interface LocalModel {
     quantization_level: string;
   };
   loaded: boolean;
-  vram_mb: number;
+  vram_mb: number | null;
   description: string;
 }
 
 export interface SystemStats {
   engine: string;
   version: string;
-  acceleration: string;
+  acceleration: string | null;
   device: string;
   total_ram_gb: number;
   used_ram_gb: number;
-  total_vram_gb: number;
-  allocated_vram_gb: number;
-  cpu_usage_pct: number;
-  inference_tok_s: number;
+  free_ram_gb?: number;
+  total_vram_gb: number | null;
+  allocated_vram_gb: number | null;
+  cpu_usage_pct: number | null;
+  inference_tok_s: number | null;
   active_models: string[];
   daemon_listening_port: number;
   api_ready: boolean;
+  provider?: string;
 }
 
 export interface ChatMessage {

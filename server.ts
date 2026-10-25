@@ -1,12 +1,16 @@
 import express, { Request, Response } from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
-import fs from 'fs';
+import fs from 'node:fs';
 import { EnvironmentDoctor } from './src/core/doctor.ts';
-import { loadConfig, saveConfig } from './src/core/config.ts';
+import { loadConfig, saveConfig, validateConfig } from './src/core/config.ts';
 import { OllamaClient } from './src/core/ollamaClient.ts';
+import { WorkspaceManager } from './src/core/workspace.ts';
+import { CodingAgent } from './src/core/agent.ts';
+import { getAIProvider } from './src/core/provider.ts';
+import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
@@ -16,7 +20,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 // Initialize GoogleGenAI server-side with required User-Agent
 let ai: GoogleGenAI | null = null;
@@ -31,116 +35,140 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
-// In-memory model registry
-interface LocalModel {
-  name: string;
-  size: number;
-  digest: string;
-  modified_at: string;
-  details: {
-    format: string;
-    family: string;
-    parameter_size: string;
-    quantization_level: string;
-  };
-  loaded: boolean;
-  vram_mb: number;
-  description: string;
-}
+/**
+ * 1. Ollama-compatible Tags endpoint
+ * Queries the real Ollama daemon. If Ollama is offline, returns empty models array with offline status.
+ * Never fabricates models.
+ */
+app.get('/api/tags', async (req: Request, res: Response) => {
+  const config = loadConfig();
+  const client = new OllamaClient(config.ollamaUrl);
 
-let installedModels: LocalModel[] = [
-  {
-    name: 'llama3.3:8b',
-    size: 4729118208,
-    digest: 'sha256:a718d2bf412e8b21714bc12690d56c4d7b51b3e15777ce02cae06e30018b105a',
-    modified_at: new Date(Date.now() - 3600000 * 48).toISOString(),
-    details: { format: 'gguf', family: 'llama', parameter_size: '8B', quantization_level: 'Q4_K_M' },
-    loaded: true,
-    vram_mb: 4720,
-    description: 'Meta Llama 3.3 8B Instruct with 128k context and tool support',
-  },
-  {
-    name: 'deepseek-r1:8b',
-    size: 4918239014,
-    digest: 'sha256:f892c4a9103e51241151ba4938a16db2c55490a1877cb1017e452179a633190b',
-    modified_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-    details: { format: 'gguf', family: 'qwen2', parameter_size: '8B', quantization_level: 'Q4_K_M' },
-    loaded: false,
-    vram_mb: 4950,
-    description: 'DeepSeek R1 reasoning model distilled from Llama 8B with chain-of-thought tokens',
-  },
-  {
-    name: 'qwen2.5-coder:7b',
-    size: 4421980000,
-    digest: 'sha256:28bc5f91e10260492160ae5280b59b12401889ca21469e7161b3698b488734e1',
-    modified_at: new Date(Date.now() - 3600000 * 140).toISOString(),
-    details: { format: 'gguf', family: 'qwen2', parameter_size: '7B', quantization_level: 'Q4_K_M' },
-    loaded: false,
-    vram_mb: 4410,
-    description: 'Alibaba Qwen 2.5 Coder optimized for coding, debugging, and terminal bash scripting',
-  },
-  {
-    name: 'mistral:7b',
-    size: 4128500000,
-    digest: 'sha256:61e88e884507b3d11b338e55e0037a8b417c8225d3a5ca853c0fae1b4bfa293c',
-    modified_at: new Date(Date.now() - 3600000 * 300).toISOString(),
-    details: { format: 'gguf', family: 'mistral', parameter_size: '7B', quantization_level: 'Q4_K_M' },
-    loaded: false,
-    vram_mb: 4100,
-    description: 'Mistral 7B Instruct v0.3 with sliding window attention',
-  },
-  {
-    name: 'phi-4:14b',
-    size: 8910000000,
-    digest: 'sha256:82b7c4a1029e00188b64e521096a56e7b42006351296bf1b6598c47b5901237a',
-    modified_at: new Date(Date.now() - 3600000 * 80).toISOString(),
-    details: { format: 'gguf', family: 'phi4', parameter_size: '14B', quantization_level: 'Q4_K_M' },
-    loaded: false,
-    vram_mb: 8850,
-    description: 'Microsoft Phi-4 14B state-of-the-art synthetic reasoning model',
-  },
-];
+  try {
+    const health = await client.checkHealth();
+    if (!health.reachable) {
+      return res.json({
+        models: [],
+        offline: true,
+        error: health.error,
+        hint: health.hint,
+        url: config.ollamaUrl,
+      });
+    }
 
-// 1. Ollama-compatible Tags endpoint
-app.get('/api/tags', (req: Request, res: Response) => {
-  res.json({
-    models: installedModels.map((m) => ({
+    const [tags, running] = await Promise.all([
+      client.listModels(),
+      client.listRunning(),
+    ]);
+
+    const runningNames = new Set(running.map((r: any) => r.name || r.model));
+
+    const models = tags.map((m) => ({
       name: m.name,
       model: m.name,
       modified_at: m.modified_at,
       size: m.size,
       digest: m.digest,
-      details: m.details,
-      loaded: m.loaded,
-      vram_mb: m.vram_mb,
-      description: m.description,
-    })),
+      details: m.details || {
+        format: 'gguf',
+        family: m.name.split(':')[0] || 'unknown',
+        parameter_size: 'unknown',
+        quantization_level: 'unknown',
+      },
+      loaded: runningNames.has(m.name),
+      vram_mb: null,
+      description: `Locally installed ${m.name} model`,
+    }));
+
+    res.json({ models, offline: false, url: config.ollamaUrl });
+  } catch (err: any) {
+    res.json({
+      models: [],
+      offline: true,
+      error: err.message || 'Failed to connect to Ollama daemon',
+      url: config.ollamaUrl,
+    });
+  }
+});
+
+/**
+ * 2. Ollama version endpoint
+ */
+app.get('/api/version', async (req: Request, res: Response) => {
+  const config = loadConfig();
+  const client = new OllamaClient(config.ollamaUrl);
+  const health = await client.checkHealth();
+  res.json({
+    reachable: health.reachable,
+    version: health.version || null,
+    url: config.ollamaUrl,
+    error: health.error || null,
+    hint: health.hint || null,
   });
 });
 
-// 2. Hardware telemetry endpoint
-app.get('/api/system/stats', (req: Request, res: Response) => {
-  const loaded = installedModels.filter((m) => m.loaded);
-  const totalVramAllocated = loaded.reduce((acc, curr) => acc + curr.vram_mb, 0);
+/**
+ * 3. Genuine System & Hardware Telemetry Endpoint
+ * Measures actual host memory, CPU, and running models.
+ * Never invents GPU models (e.g. RTX 4090) or fake VRAM.
+ */
+app.get('/api/system/stats', async (req: Request, res: Response) => {
+  const config = loadConfig();
+  const client = new OllamaClient(config.ollamaUrl);
+
+  const cpus = os.cpus();
+  const cpuModel = cpus[0]?.model || 'Generic CPU';
+  const totalRamBytes = os.totalmem();
+  const freeRamBytes = os.freemem();
+  const usedRamBytes = totalRamBytes - freeRamBytes;
+
+  let apiReady = false;
+  let ollamaVersion = 'offline';
+  let activeModels: string[] = [];
+
+  try {
+    const health = await client.checkHealth();
+    apiReady = health.reachable;
+    ollamaVersion = health.version || 'offline';
+    if (apiReady) {
+      const running = await client.listRunning();
+      activeModels = running.map((r: any) => r.name || r.model);
+    }
+  } catch {
+    // Daemon offline
+  }
+
+  // Parse listening port from ollamaUrl
+  let port = 11434;
+  try {
+    const u = new URL(config.ollamaUrl);
+    if (u.port) port = Number(u.port);
+  } catch {
+    // default
+  }
 
   res.json({
-    engine: 'OllamaNode / llama.cpp Unified Core',
-    version: '1.2.4',
-    acceleration: 'Metal 3 / CUDA 12.4 Offload',
-    device: 'Apple M3 Pro / NVIDIA RTX 4090 (Unified)',
-    total_ram_gb: 32.0,
-    used_ram_gb: 14.8,
-    total_vram_gb: 18.0,
-    allocated_vram_gb: +(totalVramAllocated / 1024).toFixed(2),
-    cpu_usage_pct: Math.floor(18 + Math.random() * 8),
-    inference_tok_s: 48.6,
-    active_models: loaded.map((m) => m.name),
-    daemon_listening_port: 11434,
-    api_ready: true,
+    engine: apiReady ? `Ollama Daemon (${ollamaVersion})` : 'Ollama Daemon (Disconnected)',
+    version: ollamaVersion,
+    acceleration: null,
+    device: `${os.type()} ${os.arch()} · ${cpuModel} (${cpus.length} cores)`,
+    total_ram_gb: +(totalRamBytes / 1073741824).toFixed(2),
+    used_ram_gb: +(usedRamBytes / 1073741824).toFixed(2),
+    free_ram_gb: +(freeRamBytes / 1073741824).toFixed(2),
+    total_vram_gb: null,
+    allocated_vram_gb: null,
+    cpu_usage_pct: null,
+    inference_tok_s: null,
+    active_models: activeModels,
+    daemon_listening_port: port,
+    api_ready: apiReady,
+    provider: config.provider,
   });
 });
 
-// Environment Diagnostics Doctor endpoint
+/**
+ * 4. Diagnostics Doctor Endpoint
+ */
 app.get('/api/doctor', async (req: Request, res: Response) => {
   try {
     const doc = new EnvironmentDoctor();
@@ -151,113 +179,161 @@ app.get('/api/doctor', async (req: Request, res: Response) => {
   }
 });
 
-// Config read/write endpoints
+/**
+ * 5. Configuration Read/Write Endpoints
+ * Sanitized, validated, defended against SSRF and prototype pollution.
+ */
 app.get('/api/config', (req: Request, res: Response) => {
-  res.json(loadConfig());
+  const cfg = loadConfig();
+  // Safe sanitized configuration object (never expose any API secrets)
+  res.json({
+    ollamaUrl: cfg.ollamaUrl,
+    defaultModel: cfg.defaultModel,
+    temperature: cfg.temperature,
+    contextSize: cfg.contextSize,
+    autoApproveSafeCommands: cfg.autoApproveSafeCommands,
+    maxSelfRepairAttempts: cfg.maxSelfRepairAttempts,
+    workspaceRoot: cfg.workspaceRoot,
+    provider: cfg.provider,
+    githubRepo: cfg.githubRepo,
+  });
 });
 
 app.post('/api/config', (req: Request, res: Response) => {
   try {
-    const updated = saveConfig(req.body);
-    res.json({ success: true, config: updated });
+    const validated = validateConfig(req.body);
+    const updated = saveConfig(validated);
+    res.json({
+      success: true,
+      config: {
+        ollamaUrl: updated.ollamaUrl,
+        defaultModel: updated.defaultModel,
+        temperature: updated.temperature,
+        contextSize: updated.contextSize,
+        autoApproveSafeCommands: updated.autoApproveSafeCommands,
+        maxSelfRepairAttempts: updated.maxSelfRepairAttempts,
+        workspaceRoot: updated.workspaceRoot,
+        provider: updated.provider,
+        githubRepo: updated.githubRepo,
+      },
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Config save failed' });
+    res.status(400).json({ error: err.message || 'Config validation failed' });
   }
 });
 
-// 3. Load / Unload model
-app.post('/api/models/:action', (req: Request, res: Response) => {
+/**
+ * 6. Model Operations (load, unload, delete)
+ * Dispatches to real Ollama API.
+ */
+app.post('/api/models/:action', async (req: Request, res: Response) => {
   const { action } = req.params;
   const { name } = req.body;
 
-  const target = installedModels.find((m) => m.name === name);
-  if (!target) {
-    return res.status(404).json({ error: 'Model not found' });
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Valid model name is required' });
   }
 
-  if (action === 'load') {
-    installedModels.forEach((m) => (m.loaded = false));
-    target.loaded = true;
-    return res.json({ success: true, message: `Loaded ${name} into VRAM`, model: target });
-  } else if (action === 'unload') {
-    target.loaded = false;
-    return res.json({ success: true, message: `Unloaded ${name} from memory`, model: target });
-  } else if (action === 'delete') {
-    installedModels = installedModels.filter((m) => m.name !== name);
-    return res.json({ success: true, message: `Deleted ${name}` });
+  const modelName = name.trim();
+  const config = loadConfig();
+  const client = new OllamaClient(config.ollamaUrl);
+
+  const health = await client.checkHealth();
+  if (!health.reachable) {
+    return res.status(503).json({
+      error: `Ollama is offline at ${config.ollamaUrl}. Cannot perform ${action}.`,
+      hint: health.hint,
+    });
   }
 
-  res.status(400).json({ error: 'Invalid action' });
+  try {
+    if (action === 'load') {
+      const ok = await client.loadModel(modelName);
+      return res.json({ success: ok, message: `Loaded ${modelName} into memory` });
+    } else if (action === 'unload') {
+      const ok = await client.unloadModel(modelName);
+      return res.json({ success: ok, message: `Unloaded ${modelName} from memory` });
+    } else if (action === 'delete') {
+      const ok = await client.deleteModel(modelName);
+      return res.json({ success: ok, message: `Deleted ${modelName}` });
+    }
+    return res.status(400).json({ error: `Invalid action "${action}". Must be load, unload, or delete.` });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || `Action ${action} failed` });
+  }
 });
 
-// 4. Model Pulling Simulator / Stream
+/**
+ * 7. Real Model Pulling Stream
+ * Proxies genuine streaming download events from Ollama.
+ */
 app.post('/api/pull', async (req: Request, res: Response) => {
   const { name } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: 'Model name is required' });
+  if (!name || typeof name !== 'string' || !/^[a-zA-Z0-9_\-.:/]+$/.test(name.trim())) {
+    return res.status(400).json({ error: 'Valid model name is required (e.g. "llama3.2:latest")' });
+  }
+
+  const modelName = name.trim();
+  const config = loadConfig();
+  const client = new OllamaClient(config.ollamaUrl);
+
+  const health = await client.checkHealth();
+  if (!health.reachable) {
+    return res.status(503).json({
+      error: `Ollama daemon is offline at ${config.ollamaUrl}`,
+      hint: health.hint,
+    });
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  const send = (obj: any) => {
-    res.write(JSON.stringify(obj) + '\n');
-  };
+  const controller = new AbortController();
+  req.on('close', () => controller.abort());
 
-  send({ status: 'pulling manifest', model: name });
-  await new Promise((r) => setTimeout(r, 400));
+  try {
+    await client.pullModel(
+      modelName,
+      (status, completed, total) => {
+        res.write(
+          JSON.stringify({
+            model: modelName,
+            status,
+            completed: completed || 0,
+            total: total || 0,
+          }) + '\n'
+        );
+      },
+      controller.signal
+    );
 
-  const totalBytes = 4500000000;
-  let downloaded = 0;
-  const steps = 8;
-  const chunkSize = totalBytes / steps;
-
-  for (let i = 1; i <= steps; i++) {
-    downloaded += chunkSize;
-    send({
-      status: `downloading weights layer-${i}.gguf`,
-      digest: `sha256:${Math.random().toString(36).substring(2, 14)}...`,
-      total: totalBytes,
-      completed: downloaded,
-      speed_mb_s: +(38 + Math.random() * 12).toFixed(1),
-    });
-    await new Promise((r) => setTimeout(r, 300));
+    res.write(JSON.stringify({ status: 'success', model: modelName }) + '\n');
+    res.end();
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Pull failed' });
+    } else {
+      res.write(JSON.stringify({ status: 'error', error: err.message }) + '\n');
+      res.end();
+    }
   }
-
-  send({ status: 'verifying sha256 checksum' });
-  await new Promise((r) => setTimeout(r, 300));
-  send({ status: 'writing manifest and registering metadata' });
-  await new Promise((r) => setTimeout(r, 200));
-
-  // Add to models if not exists
-  if (!installedModels.some((m) => m.name === name)) {
-    installedModels.push({
-      name,
-      size: totalBytes,
-      digest: 'sha256:' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
-      modified_at: new Date().toISOString(),
-      details: { format: 'gguf', family: name.split(':')[0], parameter_size: '8B', quantization_level: 'Q4_K_M' },
-      loaded: false,
-      vram_mb: 4500,
-      description: `Locally pulled ${name} model`,
-    });
-  }
-
-  send({ status: 'success', model: name });
-  res.end();
 });
 
-// 5. Ollama-compatible Generate API
+/**
+ * 8. Real Generate Endpoint
+ */
 app.post('/api/generate', async (req: Request, res: Response) => {
-  const { model = 'llama3.3:8b', prompt = '', stream = true, system = '' } = req.body;
-
-  if (!prompt) {
+  const { model, prompt, stream = true, system } = req.body;
+  if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ error: 'Prompt is required' });
   }
 
-  // If Gemini API is available and user wants server-side AI:
-  if (ai && process.env.GEMINI_API_KEY) {
+  const config = loadConfig();
+  const activeModel = model || config.defaultModel;
+
+  // Remote Gemini adapter if configured
+  if (config.provider === 'gemini' && ai && process.env.GEMINI_API_KEY) {
     try {
       if (stream) {
         res.setHeader('Content-Type', 'text/event-stream');
@@ -265,7 +341,7 @@ app.post('/api/generate', async (req: Request, res: Response) => {
         res.setHeader('Connection', 'keep-alive');
 
         const responseStream = await ai.models.generateContentStream({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: prompt,
           config: system ? { systemInstruction: system } : undefined,
         });
@@ -274,99 +350,105 @@ app.post('/api/generate', async (req: Request, res: Response) => {
           const text = chunk.text || '';
           res.write(
             JSON.stringify({
-              model,
+              model: 'gemini-2.5-flash (remote)',
               created_at: new Date().toISOString(),
               response: text,
               done: false,
             }) + '\n'
           );
         }
-
-        res.write(
-          JSON.stringify({
-            model,
-            created_at: new Date().toISOString(),
-            response: '',
-            done: true,
-            total_duration: 1240000000,
-            load_duration: 120000000,
-            prompt_eval_count: prompt.length / 4,
-            eval_count: 140,
-            eval_duration: 1120000000,
-          }) + '\n'
-        );
+        res.write(JSON.stringify({ done: true, response: '' }) + '\n');
         return res.end();
       } else {
         const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: prompt,
           config: system ? { systemInstruction: system } : undefined,
         });
         return res.json({
-          model,
-          created_at: new Date().toISOString(),
+          model: 'gemini-2.5-flash (remote)',
           response: response.text,
           done: true,
-          total_duration: 1240000000,
-          prompt_eval_count: prompt.length / 4,
-          eval_count: 120,
         });
       }
     } catch (err: any) {
-      console.warn('Gemini API call failed, falling back to local engine:', err?.message);
+      return res.status(502).json({ error: `Gemini API error: ${err.message}` });
     }
   }
 
-  // Fallback / Offline local simulation engine
-  const simulatedResponse = `[${model} Local Inference]: Processed input with private parameters.\n\nQuery: "${prompt}"\n\nExecution analysis: Model is running in an airgapped local execution frame. No telemetry or embeddings were sent to third-party endpoints. Weights offloaded to active hardware compute units (Q4_K_M quantized).`;
-
-  if (stream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    const words = simulatedResponse.split(' ');
-    for (const word of words) {
-      res.write(
-        JSON.stringify({
-          model,
-          created_at: new Date().toISOString(),
-          response: word + ' ',
-          done: false,
-        }) + '\n'
-      );
-      await new Promise((r) => setTimeout(r, 35));
-    }
-
-    res.write(
-      JSON.stringify({
-        model,
-        created_at: new Date().toISOString(),
-        response: '',
-        done: true,
-        eval_count: words.length,
-        eval_duration: 800000000,
-      }) + '\n'
-    );
-    res.end();
-  } else {
-    res.json({
-      model,
-      created_at: new Date().toISOString(),
-      response: simulatedResponse,
-      done: true,
+  // Local Ollama
+  const client = new OllamaClient(config.ollamaUrl);
+  const health = await client.checkHealth();
+  if (!health.reachable) {
+    return res.status(503).json({
+      error: `Local Ollama engine is not running at ${config.ollamaUrl}`,
+      hint: health.hint,
     });
+  }
+
+  try {
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      await client.generateStream(
+        activeModel,
+        prompt,
+        (text, chunk) => {
+          res.write(
+            JSON.stringify({
+              model: activeModel,
+              created_at: chunk.created_at || new Date().toISOString(),
+              response: text,
+              done: false,
+            }) + '\n'
+          );
+        },
+        { system, temperature: config.temperature, num_ctx: config.contextSize }
+      );
+
+      res.write(JSON.stringify({ done: true, response: '' }) + '\n');
+      res.end();
+    } else {
+      let fullText = '';
+      await client.generateStream(
+        activeModel,
+        prompt,
+        (text) => {
+          fullText += text;
+        },
+        { system, temperature: config.temperature, num_ctx: config.contextSize }
+      );
+      res.json({ model: activeModel, response: fullText, done: true });
+    }
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Generation failed' });
+    } else {
+      res.write(JSON.stringify({ error: err.message, done: true }) + '\n');
+      res.end();
+    }
   }
 });
 
-// 6. Ollama-compatible Chat API
+/**
+ * 9. Real Chat Endpoint
+ */
 app.post('/api/chat', async (req: Request, res: Response) => {
-  const { model = 'llama3.3:8b', messages = [], stream = true } = req.body;
+  const { model, messages = [], stream = true } = req.body;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'Messages array is required' });
+  }
 
-  const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user')?.content || '';
-  const systemMsg = messages.find((m: any) => m.role === 'system')?.content;
+  const config = loadConfig();
+  const activeModel = model || config.defaultModel;
 
-  if (ai && process.env.GEMINI_API_KEY && lastUserMessage) {
+  // Remote Gemini adapter if configured
+  if (config.provider === 'gemini' && ai && process.env.GEMINI_API_KEY) {
+    const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user')?.content || '';
+    const systemMsg = messages.find((m: any) => m.role === 'system')?.content;
+
     try {
       if (stream) {
         res.setHeader('Content-Type', 'text/event-stream');
@@ -374,7 +456,7 @@ app.post('/api/chat', async (req: Request, res: Response) => {
         res.setHeader('Connection', 'keep-alive');
 
         const responseStream = await ai.models.generateContentStream({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: lastUserMessage,
           config: systemMsg ? { systemInstruction: systemMsg } : undefined,
         });
@@ -383,91 +465,122 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           const text = chunk.text || '';
           res.write(
             JSON.stringify({
-              model,
+              model: 'gemini-2.5-flash (remote)',
               created_at: new Date().toISOString(),
               message: { role: 'assistant', content: text },
               done: false,
             }) + '\n'
           );
         }
-
         res.write(
           JSON.stringify({
-            model,
-            created_at: new Date().toISOString(),
+            model: 'gemini-2.5-flash (remote)',
             message: { role: 'assistant', content: '' },
             done: true,
-            total_duration: 1100000000,
-            eval_count: 120,
           }) + '\n'
         );
         return res.end();
       } else {
         const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: lastUserMessage,
           config: systemMsg ? { systemInstruction: systemMsg } : undefined,
         });
-
         return res.json({
-          model,
-          created_at: new Date().toISOString(),
+          model: 'gemini-2.5-flash (remote)',
           message: { role: 'assistant', content: response.text },
           done: true,
         });
       }
     } catch (err: any) {
-      console.warn('Gemini chat failed, fallback to local engine:', err?.message);
+      return res.status(502).json({ error: `Gemini API error: ${err.message}` });
     }
   }
 
-  // Local fallback response
-  const localReply = `I am running locally on your hardware using ${model}. Here is my response to: "${lastUserMessage}".\n\nAll compute was executed locally on your device with strict data privacy.`;
+  // Local Ollama
+  const client = new OllamaClient(config.ollamaUrl);
+  const health = await client.checkHealth();
+  if (!health.reachable) {
+    return res.status(503).json({
+      error: `Local Ollama engine is not running at ${config.ollamaUrl}`,
+      hint: health.hint,
+    });
+  }
 
-  if (stream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+  try {
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
 
-    const words = localReply.split(' ');
-    for (const w of words) {
+      await client.chatStream(
+        activeModel,
+        messages,
+        (content) => {
+          res.write(
+            JSON.stringify({
+              model: activeModel,
+              created_at: new Date().toISOString(),
+              message: { role: 'assistant', content },
+              done: false,
+            }) + '\n'
+          );
+        },
+        {
+          temperature: config.temperature,
+          num_ctx: config.contextSize,
+        }
+      );
+
       res.write(
         JSON.stringify({
-          model,
-          created_at: new Date().toISOString(),
-          message: { role: 'assistant', content: w + ' ' },
-          done: false,
+          model: activeModel,
+          message: { role: 'assistant', content: '' },
+          done: true,
         }) + '\n'
       );
-      await new Promise((r) => setTimeout(r, 30));
-    }
-
-    res.write(
-      JSON.stringify({
-        model,
-        created_at: new Date().toISOString(),
-        message: { role: 'assistant', content: '' },
+      res.end();
+    } else {
+      let fullText = '';
+      await client.chatStream(
+        activeModel,
+        messages,
+        (chunk) => {
+          fullText += chunk;
+        },
+        { temperature: config.temperature, num_ctx: config.contextSize }
+      );
+      res.json({
+        model: activeModel,
+        message: { role: 'assistant', content: fullText },
         done: true,
-      }) + '\n'
-    );
-    res.end();
-  } else {
-    res.json({
-      model,
-      created_at: new Date().toISOString(),
-      message: { role: 'assistant', content: localReply },
-      done: true,
-    });
+      });
+    }
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'Chat completion failed' });
+    } else {
+      res.write(JSON.stringify({ error: err.message, done: true }) + '\n');
+      res.end();
+    }
   }
 });
 
-// 7. Autonomous Agent Execution Loop API
+/**
+ * 10. Real Autonomous Agent Loop
+ * Connects directly to CodingAgent with WorkspaceManager sandbox and real AI provider.
+ */
 app.post('/api/agent/run', async (req: Request, res: Response) => {
-  const { goal = '', model = 'llama3.3:8b', enabledTools = ['bash', 'filesystem', 'sandbox', 'web'] } = req.body;
+  const { goal = '', targetFiles = [], verificationCommand = 'npm test' } = req.body;
 
-  if (!goal) {
-    return res.status(400).json({ error: 'Goal is required' });
+  if (!goal || typeof goal !== 'string') {
+    return res.status(400).json({ error: 'Goal prompt is required' });
   }
+
+  const config = loadConfig();
+  const provider = getAIProvider(config);
+  const workspace = new WorkspaceManager(config.workspaceRoot);
+  const agent = new CodingAgent(workspace, provider, config);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -477,99 +590,99 @@ app.post('/api/agent/run', async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ event, ...payload })}\n\n`);
   };
 
-  emit('agent_start', { goal, model, timestamp: Date.now() });
-  await new Promise((r) => setTimeout(r, 400));
+  emit('agent_start', { goal, provider: provider.name, timestamp: Date.now() });
 
-  emit('step_start', {
-    step: 1,
-    title: '1. Goal Decomposition & Planning',
-    description: `Analyzing objective: "${goal}" and generating deterministic execution steps.`,
-  });
-  await new Promise((r) => setTimeout(r, 600));
+  let stepNumber = 1;
 
-  emit('step_update', {
-    step: 1,
-    thought: `Decomposed goal into 3 sub-tasks: Inspect environment constraints, invoke runtime code generator, verify output contracts.`,
-    status: 'complete',
-  });
+  try {
+    const result = await agent.executeTask(
+      {
+        prompt: goal,
+        targetFiles: Array.isArray(targetFiles) ? targetFiles : [],
+        runVerification: true,
+        verificationCommand,
+      },
+      {
+        onStatus: (msg) => {
+          emit('step_start', {
+            step: stepNumber++,
+            title: msg,
+            description: msg,
+          });
+        },
+        onPlan: (plan) => {
+          emit('step_update', {
+            step: stepNumber,
+            thought: plan,
+            status: 'complete',
+          });
+        },
+        onFileDiff: (filePath, diff, action) => {
+          emit('tool_call', {
+            tool: 'file_edit',
+            input: { filePath, action },
+            output: diff,
+          });
+        },
+        onCommandOutput: (cmdRes) => {
+          emit('tool_call', {
+            tool: 'command_exec',
+            input: { command: cmdRes.command },
+            output: cmdRes.stdout || cmdRes.stderr || `Exit code: ${cmdRes.exitCode}`,
+          });
+        },
+        onRepairAttempt: (attempt, max, error) => {
+          emit('step_update', {
+            step: stepNumber,
+            thought: `Self-repair attempt ${attempt}/${max}: ${error}`,
+            status: 'running',
+          });
+        },
+      }
+    );
 
-  emit('step_start', {
-    step: 2,
-    title: '2. Environment Inspection & Tool Invocation',
-    description: `Executing tool [filesystem_scan] to inspect project structure and packages.`,
-  });
-  await new Promise((r) => setTimeout(r, 700));
-
-  emit('tool_call', {
-    tool: 'filesystem_scan',
-    input: { path: './', depth: 2 },
-    output: `Found package.json, server.ts, bin/localai.js, Modelfile.example. Environment: Node 20.x, TypeScript, Vite.`,
-  });
-
-  emit('step_start', {
-    step: 3,
-    title: '3. Autonomous Code Synthesis & Execution',
-    description: `Using ${model} to synthesize solution and execute sandboxed validation.`,
-  });
-  await new Promise((r) => setTimeout(r, 800));
-
-  // Synthesize answer with Gemini if available
-  let solutionText = '';
-  if (ai && process.env.GEMINI_API_KEY) {
-    try {
-      const resp = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: `You are an autonomous local AI agent. A user asked you to solve this goal: "${goal}". Provide a concrete, high-quality technical solution, step-by-step breakdown, and code snippet. Be concise, authoritative, and direct.`,
-      });
-      solutionText = resp.text || '';
-    } catch (e: any) {
-      console.warn('Agent gemini generation fallback:', e?.message);
-    }
+    emit('agent_finish', {
+      result: result.summary || (result.success ? 'Task completed successfully.' : result.error),
+      success: result.success,
+      filesChanged: result.filesChanged,
+      commandsRun: result.commandsRun,
+      duration_ms: 0,
+      status: result.success ? 'success' : 'failed',
+    });
+    res.end();
+  } catch (err: any) {
+    emit('agent_finish', {
+      result: `Execution error: ${err.message}`,
+      success: false,
+      status: 'failed',
+    });
+    res.end();
   }
-
-  if (!solutionText) {
-    solutionText = `Successfully resolved task: "${goal}".\n\nGenerated verified artifact with zero syntax violations. Clean architecture applied with full type annotations and test coverage.`;
-  }
-
-  emit('tool_call', {
-    tool: 'code_sandbox_verify',
-    input: { target: 'implementation.ts', test: 'tsc --noEmit' },
-    output: '✓ Compilation succeeded with 0 errors. All assertions passed.',
-  });
-
-  emit('step_start', {
-    step: 4,
-    title: '4. Deliverable Finalization',
-    description: 'Packaging solution and summary for user review.',
-  });
-  await new Promise((r) => setTimeout(r, 500));
-
-  emit('agent_finish', {
-    result: solutionText,
-    duration_ms: 2450,
-    tokens_generated: 480,
-    status: 'success',
-  });
-
-  res.end();
 });
 
-// 8. Repository Files API (Provides full code tree for download and interactive viewing)
+/**
+ * 11. Repository Source Files API
+ */
 app.get('/api/repo/files', (req: Request, res: Response) => {
   try {
     const fileList = [
       'package.json',
       'README.md',
+      'bin/hmhslocal.js',
       'bin/localai.js',
-      'Modelfile.example',
-      'examples/curl_examples.sh',
-      'examples/python_agent.py',
-      'examples/node_client.mjs',
-      'LICENSE',
+      'bin/hmhslocal.cmd',
+      'bin/codex.cmd',
+      'bin/localai.cmd',
       '.env.example',
       'vite.config.ts',
       'tsconfig.json',
       'server.ts',
+      'src/core/config.ts',
+      'src/core/ollamaClient.ts',
+      'src/core/provider.ts',
+      'src/core/workspace.ts',
+      'src/core/agent.ts',
+      'src/core/doctor.ts',
       'src/App.tsx',
     ];
 
@@ -606,7 +719,7 @@ async function startServer() {
 
   app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`\n======================================================`);
-    console.log(`  OllamaNode Local AI Server & Dashboard Started!`);
+    console.log(`  hmhslocal Production AI Server & Dashboard Started!`);
     console.log(`  • Web Dashboard: http://localhost:${PORT}`);
     console.log(`  • Ollama Compatible API: http://localhost:${PORT}/api`);
     console.log(`======================================================\n`);

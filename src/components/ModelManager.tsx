@@ -48,16 +48,20 @@ export const ModelManager: React.FC<ModelManagerProps> = ({
     { name: 'nomic-embed-text', desc: 'Nomic Embeddings · High performance text vectors', size: '274 MB', vram: '1 GB' },
   ];
 
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const handlePull = async (targetName?: string) => {
     const name = targetName || pullModelName;
     if (!name.trim() || isPulling) return;
 
     setIsPulling(true);
+    setPullError(null);
     setPullProgress({
-      status: `Connecting to model registry for ${name}...`,
+      status: `Connecting to Ollama registry for ${name}...`,
       completed: 0,
-      total: 4729118208,
-      speed: '38.4 MB/s',
+      total: 0,
+      speed: '',
     });
 
     try {
@@ -66,6 +70,11 @@ export const ModelManager: React.FC<ModelManagerProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || `HTTP ${response.status}: Failed to pull model`);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -81,21 +90,24 @@ export const ModelManager: React.FC<ModelManagerProps> = ({
           for (const line of lines) {
             try {
               const data = JSON.parse(line);
+              if (data.status === 'error') {
+                throw new Error(data.error || 'Pull failed');
+              }
               setPullProgress({
                 status: data.status,
                 completed: data.completed || 0,
-                total: data.total || 4729118208,
-                speed: data.speed_mb_s ? `${data.speed_mb_s} MB/s` : '42.1 MB/s',
+                total: data.total || 0,
+                speed: '',
               });
-            } catch (err) {
-              // ignore
+            } catch (err: any) {
+              if (err.message) throw err;
             }
           }
         }
       }
       onRefreshModels();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setPullError(err.message || 'Failed to pull model');
     } finally {
       setIsPulling(false);
       setPullProgress(null);
@@ -104,15 +116,21 @@ export const ModelManager: React.FC<ModelManagerProps> = ({
   };
 
   const handleDelete = async (name: string) => {
+    setDeleteError(null);
     try {
-      await fetch('/api/models/delete', {
+      const res = await fetch('/api/models/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      onRefreshModels();
-    } catch (err) {
-      console.error(err);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        setDeleteError(errJson.error || `Failed to delete ${name}`);
+      } else {
+        onRefreshModels();
+      }
+    } catch (err: any) {
+      setDeleteError(err.message || `Network error while deleting ${name}`);
     }
   };
 
@@ -179,24 +197,44 @@ export const ModelManager: React.FC<ModelManagerProps> = ({
           </button>
         </div>
 
+        {pullError && (
+          <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded text-xs text-rose-300 flex items-center justify-between">
+            <span>Pull failed: {pullError}</span>
+            <button onClick={() => setPullError(null)} className="text-slate-400 hover:text-white text-xs">Dismiss</button>
+          </div>
+        )}
+
+        {deleteError && (
+          <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded text-xs text-rose-300 flex items-center justify-between">
+            <span>Delete failed: {deleteError}</span>
+            <button onClick={() => setDeleteError(null)} className="text-slate-400 hover:text-white text-xs">Dismiss</button>
+          </div>
+        )}
+
         {/* Pull Progress indicator */}
         {pullProgress && (
           <div className="p-3 bg-slate-950 border border-slate-800 rounded space-y-2">
             <div className="flex justify-between text-xs font-mono text-slate-300">
               <span className="text-emerald-400">{pullProgress.status}</span>
-              <span>{pullProgress.speed}</span>
+              {pullProgress.total > 0 && (
+                <span>
+                  {(pullProgress.completed / (1024 * 1024)).toFixed(1)} / {(pullProgress.total / (1024 * 1024)).toFixed(1)} MB
+                </span>
+              )}
             </div>
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.round((pullProgress.completed / pullProgress.total) * 100)
-                  )}%`,
-                }}
-              />
-            </div>
+            {pullProgress.total > 0 && (
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.round((pullProgress.completed / pullProgress.total) * 100)
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
