@@ -11,11 +11,11 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
-    "start": "node server.ts",
+    "start": "tsx server.ts",
     "cli": "node bin/hmhslocal.js",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "test": "tsx --test tests/**/*.test.ts",
+    "clean": "node -e \"const fs=require('node:fs'); for (const p of ['dist','server.js']) fs.rmSync(p,{recursive:true,force:true})\"",
+    "test": "tsx --test \"tests/**/*.test.ts\"",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
