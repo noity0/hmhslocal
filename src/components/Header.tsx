@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, activeM
         className="text-lg font-bold tracking-tight text-white whitespace-nowrap shrink-0 flex items-center gap-2.5"
       >
         <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
-        <span>OllamaNode</span>
+        <span>hmhslocal</span>
       </a>
 
       {/* Zone 2: 4-5 clean single-line text navigation links */}

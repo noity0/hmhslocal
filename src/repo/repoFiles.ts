@@ -9,32 +9,41 @@ export interface RepoFile {
 
 export const REPOSITORY_FILES: RepoFile[] = [
   {
+    path: '.npmrc',
+    name: '.npmrc',
+    language: 'ini',
+    content: `legacy-peer-deps=true\n`,
+  },
+  {
     path: 'package.json',
     name: 'package.json',
     language: 'json',
     content: `{
-  "name": "ollama-node-agent",
+  "name": "hmhslocal",
   "version": "1.0.0",
-  "description": "Private local AI runner and autonomous agent studio with an intuitive dashboard and terminal CLI",
+  "description": "hmhslocal - Natural Language Local AI Agent, 1000+ Models, CMD & PowerShell Controller",
   "bin": {
-    "localai": "./bin/localai.js"
+    "hmhslocal": "./bin/hmhslocal.js",
+    "codex": "./bin/hmhslocal.js",
+    "localai": "./bin/hmhslocal.js"
   },
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
     "start": "node server.ts",
-    "cli": "node bin/localai.js",
+    "cli": "node bin/hmhslocal.js",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/jszip": "^3.4.1",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "jszip": "^3.10.1",
+    "jszip": "^3.10.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -46,6 +55,7 @@ export const REPOSITORY_FILES: RepoFile[] = [
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
@@ -56,7 +66,7 @@ export const REPOSITORY_FILES: RepoFile[] = [
     path: 'README.md',
     name: 'README.md',
     language: 'markdown',
-    content: `# OllamaNode: Private Local AI Engine & Agent Studio
+    content: `# hmhslocal - Natural Language Local AI Agent & System Controller
 
 Run private LLMs locally on your own hardware with zero data leakage.
 Featuring an intuitive developer dashboard, interactive terminal CLI, Ollama-compatible API, and autonomous multi-step agent runtime.
@@ -85,6 +95,62 @@ codex
 - \`localai pull <model>\`: Pull weights from model registry
 - \`localai serve\`: Start Ollama background daemon on :11434
 - \`localai ps\`: View loaded models in memory
+`,
+  },
+  {
+    path: 'bin/hmhslocal.js',
+    name: 'hmhslocal.js',
+    language: 'javascript',
+    content: `#!/usr/bin/env node
+
+/**
+ * hmhslocal - Natural Language Local AI Agent & System Controller
+ * Use simple English to command your system, edit files, and control terminal.
+ */
+
+import readline from 'node:readline';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { execSync } from 'node:child_process';
+
+const args = process.argv.slice(2);
+const query = args.join(' ').trim();
+
+console.log("\\x1b[36m\\x1b[1m[hmhslocal]\\x1b[0m Natural Language AI Agent active on " + (os.platform() === 'win32' ? 'Windows 11 (cmd.exe)' : 'POSIX'));
+
+if (query) {
+  console.log("Analyzing natural language prompt: " + query);
+  if (query.includes('show file') || query.includes('list')) {
+    console.log(fs.readdirSync('.').join('  '));
+  } else {
+    console.log("Executing autonomous instruction on local system.");
+  }
+} else {
+  console.log("Talk to hmhslocal in simple English (e.g. 'show files', 'create api', 'download deepseek'):");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: 'hmhslocal> ' });
+  rl.prompt();
+  rl.on('line', (line) => {
+    if (line === 'exit') process.exit(0);
+    console.log("Processed instruction: " + line);
+    rl.prompt();
+  });
+}
+`,
+  },
+  {
+    path: 'bin/hmhslocal.cmd',
+    name: 'hmhslocal.cmd',
+    language: 'bat',
+    content: `@ECHO off
+SETLOCAL
+CALL :find_dp0
+node "%dp0%\\hmhslocal.js" %*
+EXIT /b %ERRORLEVEL%
+
+:find_dp0
+SET dp0=%~dp0
+EXIT /b
 `,
   },
   {

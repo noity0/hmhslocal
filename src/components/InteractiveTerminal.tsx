@@ -22,21 +22,20 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({
       id: 'init-1',
       type: 'system',
       text: `┌──────────────────────────────────────────────────────────────────────────┐
-│  OLLAMANODE / CODEX TERMINAL DASHBOARD v1.2.0                            │
-│  OS: Windows 11 (cmd.exe) / Apple macOS / Linux · Port: 11434 OK         │
+│  HMHSLOCAL NATURAL LANGUAGE AI AGENT v1.3.0                              │
+│  OS: Windows 11 (cmd.exe) · 1,000+ Models · Port: 11434 Ready             │
 ├─────────────────────────────────────┬────────────────────────────────────┤
-│  Active Model: llama3.3:8b (Q4_K_M) │  VRAM Alloc: 4.72 GB / 16.0 GB     │
-│  Engine: 100% Private Airgap        │  Inference: 49.2 tok/s (33 layers) │
+│  Active Model: llama3.3:8b (Q4_K_M) │  VRAM: 4.72 GB / 16.0 GB [30%]     │
+│  GitHub Repo:  noity0/hmhslocal     │  Integrations: Zite & AI Studio OK │
 └─────────────────────────────────────┴────────────────────────────────────┘
 
-ACTIONS IN TERMINAL:
-  [1] codex                     Launch interactive TUI dashboard
-  [2] codex code "<task>"       Autonomous coding agent (plans & edits files)
-  [3] codex cmd                 Connect with Windows CMD / shell bridge
-  [4] codex shell "<prompt>"    Natural language to Windows CMD / Bash helper
-  [5] codex list                List installed local models
-  [6] codex monitor             Live hardware & VRAM monitor
-  [7] codex run llama3.3:8b     Interactive streaming chat REPL`,
+TALK IN SIMPLE ENGLISH OR CASUAL LANGUAGE (No fixed syntax required!):
+  • "create a server with express and cors"
+  • "show me all files in this directory"
+  • "download deepseek-r1 model"
+  • "what models can I run locally?"
+  • "check network ports and ip address"
+  • "push latest changes to github noity0/hmhslocal"`,
     },
   ]);
 
@@ -436,18 +435,17 @@ Default Gateway . . . . . . . . . : 192.168.1.1`
       {/* Quick Click Command Presets */}
       <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-lg flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-          Quick Commands:
+          Simple English Prompts:
         </span>
         {[
-          'codex',
-          'codex cmd',
+          'show me all files in this folder',
+          'create an express server with cors',
+          'download deepseek-r1',
+          'what models are in the 1000+ catalog?',
+          'check network ports and ip',
+          'push latest changes to github',
           'dir',
           'ipconfig',
-          'codex code "Build a REST API in TypeScript"',
-          'codex shell "find all log files"',
-          'codex list',
-          'codex monitor',
-          'help',
         ].map((cmd) => (
           <button
             key={cmd}
@@ -455,7 +453,7 @@ Default Gateway . . . . . . . . . : 192.168.1.1`
             disabled={isExecuting}
             className="text-xs font-mono text-cyan-300 hover:text-white bg-slate-950 border border-slate-800 hover:border-cyan-800/60 px-2.5 py-1 rounded transition-colors whitespace-nowrap"
           >
-            $ {cmd}
+            "{cmd}"
           </button>
         ))}
       </div>
