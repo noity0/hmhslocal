@@ -90,31 +90,83 @@ npm run dev
     name: 'localai.js',
     language: 'javascript',
     content: `#!/usr/bin/env node
+
+/**
+ * LocalAI / Codex Terminal CLI
+ * Professional AI Developer & Autonomous Coding Agent for your terminal.
+ * Designed like Google Cloud CLI (gcloud) & OpenAI Codex CLI / Claude Code.
+ */
+
 import readline from 'node:readline';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 const args = process.argv.slice(2);
-const command = args[0] || '--help';
+const command = args[0] || 'repl';
 
-console.log("\\x1b[36m\\x1b[1m[OllamaNode Local AI]\\x1b[0m Running on local machine.");
+const C = {
+  reset: '\\x1b[0m',
+  bold: '\\x1b[1m',
+  dim: '\\x1b[2m',
+  cyan: '\\x1b[36m',
+  green: '\\x1b[32m',
+  yellow: '\\x1b[33m',
+  magenta: '\\x1b[35m',
+  red: '\\x1b[31m',
+  gray: '\\x1b[90m',
+};
 
-if (command === 'list') {
-  console.log("NAME                 SIZE      QUANTIZATION");
-  console.log("llama3.3:8b          4.7 GB    Q4_K_M");
-  console.log("deepseek-r1:8b       4.9 GB    Q4_K_M");
-  console.log("qwen2.5-coder:7b     4.4 GB    Q4_K_M");
-} else if (command === 'run') {
-  const model = args[1] || 'llama3.3:8b';
-  console.log(\`\\x1b[32m● Loaded \${model} into local VRAM (4096 context)\\x1b[0m\`);
-  console.log("Type '/exit' to quit.\\n");
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: '>>> ' });
-  rl.prompt();
-  rl.on('line', (line) => {
-    if (line === '/exit') process.exit(0);
-    console.log(\`[\${model}]: Locally executed with zero network telemetry.\\n\`);
-    rl.prompt();
-  });
-} else {
-  console.log("Usage: localai [run|list|pull|agent|serve|ps]");
+function printBanner() {
+  console.log(\`
+\${C.cyan}\${C.bold}  ██████╗ ██████╗ ██████╗ ███████╗██╗  ██╗
+ ██╔════╝██╔═══██╗██╔══██╗██╔════╝╚██╗██╔╝
+ ██║     ██║   ██║██║  ██║█████╗   ╚███╔╝ 
+ ██║     ██║   ██║██║  ██║██╔══╝   ██╔██╗ 
+ ╚██████╗╚██████╔╝██████╔╝███████╗██╔╝ ██╗
+  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝\${C.reset}
+  \${C.bold}Local Private AI Engine & Autonomous Codex CLI\${C.reset}
+  \${C.gray}Mode: \${C.green}Airgapped Local Hardware (Metal/CUDA)\${C.reset}
+\`);
+}
+
+switch (command) {
+  case 'code':
+    const task = args.slice(1).join(' ');
+    printBanner();
+    console.log(\`\${C.magenta}\${C.bold}⚡ Codex Terminal Coding Agent Activated\${C.reset}\`);
+    console.log(\`\${C.dim}Task: "\${task}"\${C.reset}\\n\`);
+    console.log(\`\${C.cyan}❯ Step 1/3: Workspace inspection... OK\${C.reset}\`);
+    console.log(\`\${C.cyan}❯ Step 2/3: Synthesizing verified solution... OK\${C.reset}\`);
+    console.log(\`\${C.cyan}❯ Step 3/3: Syntax check & diff generation... OK\${C.reset}\\n\`);
+    console.log(\`\${C.green}+ Created verified implementation in current directory.\${C.reset}\\n\`);
+    break;
+
+  case 'ask':
+    const q = args.slice(1).join(' ');
+    console.log(\`\\n\${C.bold}[\${C.cyan}codex\${C.reset}\${C.bold}]:\${C.reset} Processing: "\${q}"\\n\`);
+    console.log("Local private inference executed directly against GGUF tensors on local hardware.\\n");
+    break;
+
+  case 'shell':
+  case 'sh':
+    const prompt = args.slice(1).join(' ');
+    console.log(\`\\n\${C.yellow}Generated Command:\${C.reset} $ find . -type f -name "*\${prompt.split(' ')[0]}*"\\n\`);
+    break;
+
+  case 'list':
+  case 'ls':
+    console.log(\`\${C.bold}NAME                 SIZE      QUANTIZATION   STATUS\${C.reset}\`);
+    console.log('─'.repeat(60));
+    console.log("llama3.3:8b          4.7 GB    Q4_K_M         Loaded (VRAM)");
+    console.log("deepseek-r1:8b       4.9 GB    Q4_K_M         Local Disk");
+    console.log("qwen2.5-coder:7b     4.4 GB    Q4_K_M         Local Disk");
+    break;
+
+  default:
+    printBanner();
+    console.log("Usage: codex [code <task> | ask <prompt> | shell <query> | list | pull | run]");
+    break;
 }
 `,
   },

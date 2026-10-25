@@ -27,6 +27,14 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, activeM
       {/* Zone 2: 4-5 clean single-line text navigation links */}
       <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-400">
         <button
+          onClick={() => onTabChange('terminal')}
+          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 ${
+            currentTab === 'terminal' ? 'text-white' : ''
+          }`}
+        >
+          Terminal CLI
+        </button>
+        <button
           onClick={() => onTabChange('dashboard')}
           className={`hover:text-white transition-colors whitespace-nowrap shrink-0 ${
             currentTab === 'dashboard' ? 'text-white' : ''
@@ -49,14 +57,6 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, activeM
           }`}
         >
           Agents
-        </button>
-        <button
-          onClick={() => onTabChange('terminal')}
-          className={`hover:text-white transition-colors whitespace-nowrap shrink-0 ${
-            currentTab === 'terminal' ? 'text-white' : ''
-          }`}
-        >
-          Terminal CLI
         </button>
         <button
           onClick={() => onTabChange('repo')}

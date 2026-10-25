@@ -12,7 +12,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { LocalModel, SystemStats } from './types';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [currentTab, setCurrentTab] = useState<string>('terminal');
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [models, setModels] = useState<LocalModel[]>([
     {

@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Private local AI runner and autonomous agent studio with an intuitive dashboard and terminal CLI",
   "bin": {
-    "localai": "./bin/localai.js"
+    "localai": "./bin/localai.js",
+    "codex": "./bin/localai.js",
+    "ai": "./bin/localai.js"
   },
   "type": "module",
   "scripts": {
