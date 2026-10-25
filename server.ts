@@ -4,6 +4,9 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
+import { EnvironmentDoctor } from './src/core/doctor.ts';
+import { loadConfig, saveConfig } from './src/core/config.ts';
+import { OllamaClient } from './src/core/ollamaClient.ts';
 
 dotenv.config();
 
@@ -135,6 +138,31 @@ app.get('/api/system/stats', (req: Request, res: Response) => {
     daemon_listening_port: 11434,
     api_ready: true,
   });
+});
+
+// Environment Diagnostics Doctor endpoint
+app.get('/api/doctor', async (req: Request, res: Response) => {
+  try {
+    const doc = new EnvironmentDoctor();
+    const report = await doc.runDiagnostics();
+    res.json(report);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Doctor failed' });
+  }
+});
+
+// Config read/write endpoints
+app.get('/api/config', (req: Request, res: Response) => {
+  res.json(loadConfig());
+});
+
+app.post('/api/config', (req: Request, res: Response) => {
+  try {
+    const updated = saveConfig(req.body);
+    res.json({ success: true, config: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Config save failed' });
+  }
 });
 
 // 3. Load / Unload model

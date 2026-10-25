@@ -33,6 +33,7 @@ export const REPOSITORY_FILES: RepoFile[] = [
     "build": "vite build",
     "start": "node server.ts",
     "cli": "node bin/hmhslocal.js",
+    "test": "tsx --test tests/**/*.test.ts",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },

@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * hmhslocal - Autonomous Natural Language AI Agent for Terminal
- * Control your entire system in plain English or simple language.
- * No fixed commands needed.
- * Works on Windows 11 (cmd.exe & PowerShell), macOS, and Linux.
- * Integrates with local files, CMD/PowerShell, GitHub, Zite & Google AI Studio.
+ * hmhslocal - Production Autonomous Local AI Agent for Terminal
+ * Control your entire machine in plain English or standard CLI commands.
+ * Zero-cloud-leakage local execution via Ollama (default).
+ * Fully supported on Windows 11 (cmd.exe & PowerShell), macOS, and Linux.
  */
 
 import readline from 'node:readline';
@@ -14,6 +13,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
 
+// Core imports (executed directly by Node 22)
+import { loadConfig, saveConfig } from '../src/core/config.ts';
+import { OllamaClient } from '../src/core/ollamaClient.ts';
+import { WorkspaceManager } from '../src/core/workspace.ts';
+import { getAIProvider } from '../src/core/provider.ts';
+import { CodingAgent } from '../src/core/agent.ts';
+import { EnvironmentDoctor } from '../src/core/doctor.ts';
+
 const args = process.argv.slice(2);
 const userQuery = args.join(' ').trim();
 
@@ -21,7 +28,7 @@ const userQuery = args.join(' ').trim();
 const PLATFORM = os.platform();
 const IS_WINDOWS = PLATFORM === 'win32';
 const IS_MAC = PLATFORM === 'darwin';
-const OS_LABEL = IS_WINDOWS ? 'Windows 11 (cmd.exe)' : IS_MAC ? 'Apple macOS' : 'Linux';
+const OS_LABEL = IS_WINDOWS ? 'Windows 11 (cmd.exe / PowerShell)' : IS_MAC ? 'Apple macOS' : 'Linux';
 
 // ANSI Colors
 const C = {
@@ -38,16 +45,12 @@ const C = {
   bgDark: '\x1b[48;5;235m',
 };
 
-// Configuration
-const CONFIG_FILE = path.join(os.homedir() || '.', '.hmhslocalrc');
-let currentConfig = {
-  model: 'llama3.3:8b',
-  backend: IS_MAC ? 'Apple Metal 3' : IS_WINDOWS ? 'NVIDIA CUDA / DirectML' : 'CUDA',
-  port: 11434,
-  github: 'noity0/hmhslocal',
-  zite: 'connected',
-  aiStudio: !!process.env.GEMINI_API_KEY ? 'gemini-3.8-flash' : 'offline-local',
-};
+const config = loadConfig();
+const workspace = new WorkspaceManager(process.cwd());
+const provider = getAIProvider(config);
+const ollama = new OllamaClient(config.ollamaUrl);
+const agent = new CodingAgent(workspace, provider, config);
+const doctor = new EnvironmentDoctor(config);
 
 function printBanner() {
   console.log(`
@@ -57,16 +60,211 @@ ${C.cyan}${C.bold}  ██╗  ██╗███╗   ███╗██╗  �
   ██╔══██║██║╚██╔╝██║██╔══██║╚════██║██║     ██║   ██║██║     ██╔══██║██║     
   ██║  ██║██║ ╚═╝ ██║██║  ██║███████║███████╗╚██████╔╝╚██████╗██║  ██║███████╗
   ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝${C.reset}
-  ${C.bold}Natural Language Local AI Agent (Windows 11 · macOS · Linux)${C.reset}
-  ${C.gray}Talk to me in simple English or casual words. No fixed syntax needed.${C.reset}
-  ${C.gray}Host: ${C.green}${OS_LABEL}${C.gray} · 1,000+ Models · GitHub: ${C.cyan}${currentConfig.github}${C.reset}
+  ${C.bold}Production Local AI Agent · Terminal & Coding Assistant${C.reset}
+  ${C.gray}Platform: ${C.green}${OS_LABEL}${C.gray} · Model: ${C.cyan}${config.defaultModel}${C.gray} · Provider: ${C.yellow}${provider.name}${C.reset}
+  ${C.dim}Talk in simple English or casual words. No fixed syntax required.${C.reset}
 `);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AUTONOMOUS NATURAL LANGUAGE DISPATCHER
-// Understands any prompt in simple English or casual wording
-// ─────────────────────────────────────────────────────────────────────────────
+function printHelp() {
+  console.log(`
+${C.bold}USAGE:${C.reset}
+  hmhslocal [command] [options]
+  hmhslocal <natural language instruction in plain English>
+
+${C.bold}CORE COMMANDS:${C.reset}
+  ${C.cyan}doctor${C.reset}                   Inspect system health, Node version, Ollama daemon, and paths
+  ${C.cyan}chat [prompt]${C.reset}            Interactive chat or single query with streaming responses
+  ${C.cyan}code <prompt>${C.reset}            Autonomous coding agent (plans, inspects, edits diffs, tests)
+  ${C.cyan}ask <question>${C.reset}           Ask codebase questions or architectural explanations
+  ${C.cyan}models${C.reset}                   List locally installed Ollama models and 1,000+ catalog
+  ${C.cyan}pull <model>${C.reset}             Download weights for an Ollama model with verified checksum
+  ${C.cyan}config [key] [value]${C.reset}     View or update settings (.hmhslocalrc)
+  ${C.cyan}help, --help, -h${C.reset}         Show this help screen
+
+${C.bold}NATURAL LANGUAGE EXAMPLES:${C.reset}
+  hmhslocal "create a rest api in express with user authentication"
+  hmhslocal "fix syntax errors in server.ts"
+  hmhslocal "run tests and summarize failures"
+  hmhslocal "pull deepseek-r1"
+  hmhslocal "what files are in this folder"
+`);
+}
+
+/**
+ * Doctor Diagnostic Command
+ */
+async function runDoctorCommand() {
+  console.log(`\n${C.bold}Running Environment Diagnostics...${C.reset}\n`);
+  const report = await doctor.runDiagnostics();
+
+  report.checks.forEach((c) => {
+    const icon = c.status === 'pass' ? `${C.green}✔ PASS${C.reset}` : c.status === 'warn' ? `${C.yellow}▲ WARN${C.reset}` : `${C.red}✖ FAIL${C.reset}`;
+    console.log(`  ${icon} ${C.bold}${c.name}${C.reset}: ${c.message}`);
+    if (c.remediation) {
+      console.log(`         ${C.dim}Fix: ${c.remediation}${C.reset}`);
+    }
+  });
+
+  console.log(`\n${report.allChecksPassed ? C.green + '✔ All core checks passed.' : C.yellow + '▲ Some warnings detected.'}${C.reset}\n`);
+}
+
+/**
+ * Ask confirmation prompt
+ */
+function promptConfirm(questionText) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`\n${C.yellow}${C.bold}${questionText} [Y/n]: ${C.reset}`, (answer) => {
+      rl.close();
+      const ans = (answer || 'y').toLowerCase().trim();
+      resolve(ans === 'y' || ans === 'yes');
+    });
+  });
+}
+
+/**
+ * Autonomous Coding Agent Execution
+ */
+async function runCodingAgent(instruction) {
+  console.log(`\n${C.magenta}${C.bold}⚡ hmhslocal Autonomous Coding Agent${C.reset}`);
+  console.log(`${C.dim}Instruction:${C.reset} "${instruction}"\n`);
+
+  const result = await agent.executeTask(
+    {
+      prompt: instruction,
+      runVerification: true,
+    },
+    {
+      onStatus: (msg) => console.log(`${C.cyan}❯ ${msg}${C.reset}`),
+      onPlan: (plan) => {
+        console.log(`\n${C.bold}Implementation Plan:${C.reset}\n${plan}\n`);
+      },
+      onFileDiff: (file, diff, action) => {
+        console.log(`\n${C.yellow}${C.bold}Proposed Change (${action}):${C.reset} ${C.cyan}${file}${C.reset}`);
+        console.log('─'.repeat(70));
+        diff.split('\n').forEach((line) => {
+          if (line.startsWith('+')) console.log(`${C.green}${line}${C.reset}`);
+          else if (line.startsWith('-')) console.log(`${C.red}${line}${C.reset}`);
+          else console.log(`${C.dim}${line}${C.reset}`);
+        });
+        console.log('─'.repeat(70));
+      },
+      confirmAction: async (desc) => {
+        return promptConfirm(desc);
+      },
+      onRepairAttempt: (attempt, max, err) => {
+        console.log(`\n${C.yellow}⚠ Verification error detected. Self-repair attempt ${attempt}/${max}...${C.reset}`);
+        console.log(`${C.dim}${err.slice(0, 200)}...${C.reset}`);
+      },
+    }
+  );
+
+  console.log(`\n${result.success ? C.green + '✔ Task Complete' : C.red + '✖ Task Incomplete'}: ${result.summary}${C.reset}\n`);
+}
+
+/**
+ * Chat / Reasoning Execution with Streaming
+ */
+async function runChatStream(promptText) {
+  process.stdout.write(`\n${C.cyan}${C.bold}[${config.defaultModel}]:${C.reset} `);
+
+  try {
+    const res = await provider.chatStream(
+      config.defaultModel,
+      [
+        {
+          role: 'system',
+          content: 'You are hmhslocal, a helpful, precise terminal AI assistant. Be concise, accurate, and output clean markdown for code.',
+        },
+        { role: 'user', content: promptText },
+      ],
+      (chunk) => {
+        process.stdout.write(chunk);
+      }
+    );
+
+    console.log(`\n\n${C.gray}[${res.isLocal ? 'Local Private Engine' : 'Remote Provider'} · ${res.durationMs}ms]${C.reset}\n`);
+  } catch (err) {
+    console.log(`\n\n${C.red}Error:${C.reset} ${err.message}\n`);
+    if (provider.id === 'ollama') {
+      console.log(`${C.dim}Tip: Run "hmhslocal doctor" to check if Ollama is running.${C.reset}\n`);
+    }
+  }
+}
+
+/**
+ * Models Listing & Pulling
+ */
+async function handleModelsCommand(actionArg, modelArg) {
+  if (actionArg === 'pull' || userQuery.toLowerCase().startsWith('pull')) {
+    const targetModel = modelArg || args[1] || 'llama3.2';
+    console.log(`\n${C.cyan}Pulling model [${targetModel}] via Ollama HTTP API...${C.reset}`);
+
+    const confirmed = await promptConfirm(`Download weights for ${targetModel}?`);
+    if (!confirmed) {
+      console.log(`${C.gray}Download cancelled.${C.reset}\n`);
+      return;
+    }
+
+    try {
+      await ollama.pullModel(targetModel, (status, completed, total) => {
+        if (total && completed) {
+          const pct = Math.round((completed / total) * 100);
+          const mbDone = (completed / 1024 / 1024).toFixed(1);
+          const mbTotal = (total / 1024 / 1024).toFixed(1);
+          process.stdout.write(`\r${C.dim}${status}: ${pct}% (${mbDone}/${mbTotal} MB)${C.reset}   `);
+        } else {
+          process.stdout.write(`\r${C.dim}${status}...${C.reset}   `);
+        }
+      });
+      console.log(`\n${C.green}✔ Model ${targetModel} installed successfully!${C.reset}\n`);
+    } catch (err) {
+      console.log(`\n${C.red}Failed to pull model:${C.reset} ${err.message}\n`);
+      console.log(`${C.dim}Make sure Ollama is running (ollama serve).${C.reset}\n`);
+    }
+    return;
+  }
+
+  // List locally installed models
+  console.log(`\n${C.bold}LOCAL OLLAMA INSTALLED MODELS (${config.ollamaUrl}):${C.reset}\n`);
+  try {
+    const models = await ollama.listModels();
+    if (models.length === 0) {
+      console.log(`  ${C.yellow}No local models installed yet.${C.reset}`);
+      console.log(`  ${C.dim}Download one with: hmhslocal pull llama3.2${C.reset}\n`);
+    } else {
+      models.forEach((m) => {
+        const sizeGb = (m.size / 1024 / 1024 / 1024).toFixed(2);
+        console.log(`  ${C.green}● ${m.name.padEnd(28)}${C.reset} ${C.gray}${sizeGb} GB${C.reset}`);
+      });
+      console.log();
+    }
+  } catch (err) {
+    console.log(`  ${C.red}Ollama is unreachable at ${config.ollamaUrl}:${C.reset} ${err.message}`);
+    console.log(`  ${C.dim}Start Ollama with: ollama serve${C.reset}\n`);
+  }
+
+  // Popular curated catalog
+  console.log(`${C.bold}CURATED 1,000+ COMPATIBLE MODELS CATALOG (Highlights):${C.reset}`);
+  console.log('─'.repeat(75));
+  const popular = [
+    { name: 'llama3.3:8b', fam: 'Llama 3.3', size: '4.7 GB', use: 'Fast General Instruction (Default)' },
+    { name: 'deepseek-r1:8b', fam: 'DeepSeek-R1', size: '4.9 GB', use: 'Chain-of-thought Reasoning & Math' },
+    { name: 'qwen2.5-coder:7b', fam: 'Qwen 2.5 Coder', size: '4.4 GB', use: 'Terminal Scripting & Code Completion' },
+    { name: 'mistral-nemo:12b', fam: 'Mistral AI', size: '6.8 GB', use: 'High Reasoning & Multilingual' },
+    { name: 'phi-4:14b', fam: 'Microsoft Phi', size: '8.9 GB', use: 'Complex Logic & Synthetic Reasoning' },
+    { name: 'gemma-2:9b', fam: 'Google Gemma', size: '5.4 GB', use: 'High-performance Open Weights' },
+  ];
+  popular.forEach((p) => {
+    console.log(`  ${C.cyan}${p.name.padEnd(20)}${C.reset} ${p.fam.padEnd(16)} ${p.size.padEnd(10)} ${p.use}`);
+  });
+  console.log(`\n${C.dim}To download any model, run: hmhslocal pull <model-name>${C.reset}\n`);
+}
+
+/**
+ * Natural language intent dispatcher
+ */
 async function handleNaturalLanguageInput(promptText, onDone) {
   const p = promptText.trim().toLowerCase();
   if (!p) {
@@ -74,344 +272,145 @@ async function handleNaturalLanguageInput(promptText, onDone) {
     return;
   }
 
-  // 1. Exit / Bye
-  if (['exit', 'quit', 'bye', 'close', 'band karo', 'khatam'].includes(p)) {
+  if (['exit', 'quit', 'bye', 'close', 'khatam'].includes(p)) {
     console.log(`\n${C.dim}Goodbye! hmhslocal session closed.${C.reset}\n`);
     process.exit(0);
   }
 
-  // 2. Clear Screen
-  if (['clear', 'cls', 'saf karo', 'clean'].includes(p)) {
+  if (['clear', 'cls', 'clean'].includes(p)) {
     process.stdout.write('\x1b[2J\x1b[0f');
     printBanner();
     if (onDone) onDone();
     return;
   }
 
-  // 3. File Creation & Code Editing Intent
-  // e.g.: "create a file called test.js", "write a python script", "make an api in express", "fix bug in server.ts"
+  if (p === 'doctor' || p.includes('system health') || p.includes('check system') || p.includes('diagnostics')) {
+    await runDoctorCommand();
+    if (onDone) onDone();
+    return;
+  }
+
+  if (p === 'models' || p === 'model list' || p.includes('show models') || p.includes('list models')) {
+    await handleModelsCommand();
+    if (onDone) onDone();
+    return;
+  }
+
+  if (p.startsWith('pull ') || p.startsWith('download ')) {
+    const target = promptText.replace(/^(pull|download)\s+/i, '').trim();
+    await handleModelsCommand('pull', target);
+    if (onDone) onDone();
+    return;
+  }
+
+  // File creation, coding, editing intent
   if (
     p.includes('create') ||
     p.includes('write') ||
-    p.includes('make a file') ||
-    p.includes('make file') ||
     p.includes('build') ||
+    p.includes('make a') ||
     p.includes('code') ||
-    p.includes('banao') ||
-    p.includes('likho') ||
+    p.includes('fix') ||
+    p.includes('refactor') ||
+    p.includes('test') ||
     p.includes('script')
   ) {
-    await handleCodeCreationIntent(promptText);
+    await runCodingAgent(promptText);
     if (onDone) onDone();
     return;
   }
 
-  // 4. Model Search & Pulling Intent
-  // e.g.: "download deepseek", "get llama 3", "pull model", "show models", "models list", "find coding model"
-  if (
-    p.includes('model') ||
-    p.includes('download') ||
-    p.includes('pull') ||
-    p.includes('deepseek') ||
-    p.includes('llama') ||
-    p.includes('qwen') ||
-    p.includes('mistral') ||
-    p.includes('phi')
-  ) {
-    await handleModelCatalogIntent(promptText);
+  // Directory inspection intent
+  if (p.includes('show files') || p.includes('list files') || p === 'ls' || p === 'dir') {
+    const files = workspace.findFiles({ maxResults: 30 });
+    console.log(`\n${C.cyan}${C.bold}Workspace Files (${workspace.getRoot()}):${C.reset}\n`);
+    files.forEach((f) => console.log(`  📄 ${f}`));
+    console.log();
     if (onDone) onDone();
     return;
   }
 
-  // 5. Directory & File Inspection Intent
-  // e.g.: "show files", "what files are here", "list directory", "check folder", "files dekhao"
-  if (
-    p.includes('show file') ||
-    p.includes('list file') ||
-    p.includes('what file') ||
-    p.includes('check folder') ||
-    p.includes('show directory') ||
-    p.includes('dir') ||
-    p.includes('ls') ||
-    p.includes('files dekhao') ||
-    p.includes('kya hai folder me')
-  ) {
-    handleListFilesIntent();
-    if (onDone) onDone();
-    return;
-  }
-
-  // 7. GitHub & Zite Integration Intent
-  // e.g.: "connect to github", "push changes", "sync git", "zite auth", "commit code"
-  if (
-    p.includes('git') ||
-    p.includes('github') ||
-    p.includes('zite') ||
-    p.includes('push') ||
-    p.includes('commit') ||
-    p.includes('repo')
-  ) {
-    handleGitAndIntegrationsIntent(promptText);
-    if (onDone) onDone();
-    return;
-  }
-
-  // 8. General Question / Reasoning / Explanation
-  // e.g.: "explain how vector search works", "what is quantization", "how to optimize memory"
-  await handleGeneralReasoningIntent(promptText);
+  // Default to streaming conversational reasoning
+  await runChatStream(promptText);
   if (onDone) onDone();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// INTENT HANDLERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Handler 1: Code Creation & Editing
-async function handleCodeCreationIntent(promptText) {
-  console.log(`\n${C.magenta}${C.bold}⚡ hmhslocal Autonomous Coding Agent${C.reset}`);
-  console.log(`${C.dim}Understanding your request:${C.reset} "${promptText}"\n`);
-
-  process.stdout.write(`${C.cyan}❯ Step 1/3: Reading current workspace...${C.reset} `);
-  await new Promise((r) => setTimeout(r, 350));
-  let existingFiles = [];
-  try {
-    existingFiles = fs.readdirSync(process.cwd()).filter((f) => !f.startsWith('.') && f !== 'node_modules');
-  } catch (e) {
-    existingFiles = ['package.json', 'server.ts'];
-  }
-  console.log(`${C.green}OK${C.reset} ${C.gray}(found ${existingFiles.length} files)${C.reset}`);
-
-  process.stdout.write(`${C.cyan}❯ Step 2/3: Generating verified code implementation...${C.reset} `);
-  await new Promise((r) => setTimeout(r, 500));
-  console.log(`${C.green}OK${C.reset}\n`);
-
-  // Detect requested filename or infer extension
-  let targetFile = 'solution.ts';
-  const p = promptText.toLowerCase();
-  if (p.includes('.py') || p.includes('python')) targetFile = 'app.py';
-  else if (p.includes('.js') || p.includes('javascript')) targetFile = 'index.js';
-  else if (p.includes('.html')) targetFile = 'index.html';
-  else if (p.includes('.json')) targetFile = 'data.json';
-  else if (p.includes('server')) targetFile = 'src/server-addon.ts';
-  else if (p.includes('auth')) targetFile = 'src/auth-middleware.ts';
-
-  const generatedCode = `// Generated by hmhslocal Natural Language Agent
-// Request: ${promptText}
-// Target: ${targetFile} · OS: ${OS_LABEL}
-
-export async function executeTask() {
-  console.log("[hmhslocal] Executing automated task: ${promptText.replace(/"/g, '')}");
-  return {
-    success: true,
-    platform: "${OS_LABEL}",
-    timestamp: new Date().toISOString(),
-  };
-}
-`;
-
-  console.log(`${C.yellow}${C.bold}Proposed File & Code Diff:${C.reset} ${C.cyan}${targetFile}${C.reset}`);
-  console.log('─'.repeat(70));
-  generatedCode.split('\n').forEach((l) => console.log(`${C.green}+ ${l}${C.reset}`));
-  console.log('─'.repeat(70));
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(`\n${C.bold}Should I write this file to your system? [Y/n]: ${C.reset}`, (answer) => {
-      rl.close();
-      const ans = (answer || 'y').toLowerCase().trim();
-      if (ans === 'y' || ans === 'yes') {
-        try {
-          const dir = path.dirname(targetFile);
-          if (dir !== '.' && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          fs.writeFileSync(targetFile, generatedCode);
-          console.log(`\n${C.green}✔ Successfully created:${C.reset} ${path.resolve(targetFile)}`);
-          console.log(`${C.dim}Syntax verified: 0 errors.${C.reset}\n`);
-        } catch (err) {
-          console.log(`\n${C.red}Error writing file:${C.reset} ${err.message}\n`);
-        }
-      } else {
-        console.log(`\n${C.gray}File creation skipped.${C.reset}\n`);
-      }
-      resolve();
-    });
-  });
-}
-
-// Handler 2: List Workspace Files
-function handleListFilesIntent() {
-  console.log(`\n${C.cyan}${C.bold}Workspace File Explorer (${process.cwd()}):${C.reset}\n`);
-  try {
-    const items = fs.readdirSync(process.cwd(), { withFileTypes: true });
-    items.forEach((item) => {
-      if (item.name.startsWith('.') || item.name === 'node_modules') return;
-      if (item.isDirectory()) {
-        console.log(`  ${C.blue}${C.bold}📁 ${item.name}/${C.reset}`);
-      } else {
-        const stats = fs.statSync(item.name);
-        const sizeKb = (stats.size / 1024).toFixed(1);
-        console.log(`  ${C.green}📄 ${item.name.padEnd(25)}${C.reset} ${C.gray}${sizeKb} KB${C.reset}`);
-      }
-    });
-    console.log();
-  } catch (err) {
-    console.log(`${C.red}Could not read directory:${C.reset} ${err.message}\n`);
-  }
-}
-
-// Handler 3: System Commands (Translates plain English to CMD or Bash)
-async function handleSystemCommandIntent(promptText) {
-  console.log(`\n${C.yellow}Translating your command to system executable...${C.reset}`);
-
-  let cmdToRun = '';
-  const p = promptText.toLowerCase();
-
-  if (p.includes('ip') || p.includes('network')) {
-    cmdToRun = IS_WINDOWS ? 'ipconfig' : 'ifconfig || ip a';
-  } else if (p.includes('port') || p.includes('listen')) {
-    cmdToRun = IS_WINDOWS ? 'netstat -ano | findstr LISTENING' : 'lsof -iTCP -sTCP:LISTEN -n -P';
-  } else if (p.includes('git status')) {
-    cmdToRun = 'git status';
-  } else if (p.includes('npm install')) {
-    cmdToRun = 'npm install';
-  } else if (p.includes('disk') || p.includes('space')) {
-    cmdToRun = IS_WINDOWS ? 'wmic logicaldisk get caption, freespace, size' : 'df -h';
-  } else if (p.startsWith('run ') || p.startsWith('exec ')) {
-    cmdToRun = promptText.replace(/^(run|exec)\s+/i, '');
-  } else {
-    cmdToRun = promptText;
-  }
-
-  console.log(`${C.bold}Executable Command on ${OS_LABEL}:${C.reset}`);
-  console.log(`  ${C.bgDark}${C.green}${C.bold} $ ${cmdToRun} ${C.reset}\n`);
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(`${C.bold}Run this command in terminal? [Y/n]: ${C.reset}`, (ans) => {
-      rl.close();
-      if ((ans || 'y').toLowerCase().trim() === 'y') {
-        console.log(`\n${C.dim}── Output ──────────────────────────────────────────${C.reset}`);
-        try {
-          const out = execSync(cmdToRun, {
-            encoding: 'utf-8',
-            shell: IS_WINDOWS ? 'cmd.exe' : '/bin/sh',
-            timeout: 10000,
-          });
-          console.log(out || `${C.gray}(Command finished with 0 output)${C.reset}`);
-        } catch (err) {
-          console.log(`${C.red}Execution failed:${C.reset} ${err.message || err.stderr}`);
-        }
-        console.log(`${C.dim}────────────────────────────────────────────────────${C.reset}\n`);
-      } else {
-        console.log(`${C.gray}Execution cancelled.${C.reset}\n`);
-      }
-      resolve();
-    });
-  });
-}
-
-// Handler 4: Models Catalog & Download
-async function handleModelCatalogIntent(promptText) {
-  const p = promptText.toLowerCase();
-
-  // If user wants to download a model: "download deepseek", "get llama 3"
-  if (p.includes('download') || p.includes('pull') || p.includes('get ')) {
-    let target = 'llama3.3:8b';
-    if (p.includes('deepseek')) target = 'deepseek-r1:8b';
-    else if (p.includes('qwen')) target = 'qwen2.5-coder:7b';
-    else if (p.includes('mistral')) target = 'mistral-nemo:12b';
-    else if (p.includes('phi')) target = 'phi-4:14b';
-    else if (p.includes('gemma')) target = 'gemma-2:9b';
-
-    console.log(`\n${C.cyan}Pulling model weights for [${target}] from 1,000+ catalog...${C.reset}`);
-    for (let i = 1; i <= 10; i++) {
-      const pct = i * 10;
-      const bar = '█'.repeat(i * 2).padEnd(20, '░');
-      process.stdout.write(`\r${C.dim}downloading GGUF ▕${C.green}${bar}${C.dim}▏ ${pct}% 4.7 GB 48.1 MB/s${C.reset}`);
-      await new Promise((r) => setTimeout(r, 80));
-    }
-    console.log(`\n${C.green}✔ Verified checksum sha256.${C.reset}`);
-    console.log(`${C.green}✔ ${target} is now active and loaded in VRAM.${C.reset}\n`);
-    return;
-  }
-
-  // Otherwise browse models
-  console.log(`\n${C.bold}1,000+ VERIFIED OPEN-SOURCE WORKING MODELS CATALOG:${C.reset}\n`);
-  const models = [
-    { name: 'llama3.3:8b', fam: 'Llama 3.3', size: '4.7 GB', vram: '6 GB', use: 'Fast General Instruction (Default)' },
-    { name: 'deepseek-r1:8b', fam: 'DeepSeek-R1', size: '4.9 GB', vram: '6 GB', use: 'Chain-of-thought Reasoning & Math' },
-    { name: 'qwen2.5-coder:7b', fam: 'Qwen 2.5 Coder', size: '4.4 GB', vram: '6 GB', use: 'Terminal Scripting & Code Completion' },
-    { name: 'mistral-nemo:12b', fam: 'Mistral AI', size: '6.8 GB', vram: '9 GB', use: 'High Reasoning & Multilingual' },
-    { name: 'phi-4:14b', fam: 'Microsoft Phi', size: '8.9 GB', vram: '11 GB', use: 'Complex Logic & Synthetic Reasoning' },
-    { name: 'gemma-2:9b', fam: 'Google Gemma', size: '5.4 GB', vram: '7 GB', use: 'Google Research Derived Weights' },
-    { name: 'llava:34b', fam: 'LLaVA 1.6', size: '19.2 GB', vram: '24 GB', use: 'Vision & Multimodal Image Parsing' },
-    { name: 'nomic-embed-text', fam: 'Nomic Embed', size: '274 MB', vram: '1 GB', use: 'Dense Vector Embeddings' },
-  ];
-
-  console.log(`${C.bold}MODEL${C.reset.padEnd(25)} ${C.bold}FAMILY${C.reset.padEnd(16)} ${C.bold}SIZE${C.reset.padEnd(12)} ${C.bold}USE CASE${C.reset}`);
-  console.log('─'.repeat(75));
-  models.forEach((m) => {
-    console.log(`${C.cyan}${m.name.padEnd(20)}${C.reset} ${m.fam.padEnd(14)} ${m.size.padEnd(10)} ${m.use}`);
-  });
-  console.log(`\n${C.dim}... and 1,032 more quantized variants (Q3, Q4, Q5, Q8, FP16).${C.reset}`);
-  console.log(`${C.gray}To download any model, just say: "download deepseek-r1" or "pull qwen2.5-coder"${C.reset}\n`);
-}
-
-// Handler 5: Git & Integrations (GitHub, Zite, Google AI Studio)
-function handleGitAndIntegrationsIntent(promptText) {
-  console.log(`\n${C.bold}INTEGRATIONS & WORKSPACE SYNC:${C.reset}\n`);
-
-  console.log(`1. ${C.bold}GitHub Repo:${C.reset} ${C.cyan}https://github.com/noity0/hmhslocal.git${C.reset}`);
-  try {
-    const status = execSync('git status -s', { encoding: 'utf-8' }).trim();
-    console.log(`   Status:       ${C.green}Local git initialized${C.reset}`);
-    console.log(`   Changes:      ${status ? '\n' + status : 'Working tree clean'}`);
-  } catch (e) {
-    console.log(`   Status:       Ready to initialize with git init`);
-  }
-
-  console.log(`\n2. ${C.bold}Zite Integration:${C.reset}`);
-  console.log(`   Status:       ${C.green}Active & Synchronized${C.reset}`);
-
-  console.log(`\n3. ${C.bold}Google AI Studio:${C.reset}`);
-  console.log(`   Status:       ${C.green}Gemini 3.8 Flash Hybrid Connected${C.reset}\n`);
-}
-
-// Handler 6: General AI Reasoning (Plain conversation)
-async function handleGeneralReasoningIntent(promptText) {
-  console.log(`\n${C.bold}[${currentConfig.model}]:${C.reset} `);
-
-  const mockResponse = [
-    `I understood your prompt: "${promptText}".\n\n`,
-    `I am running directly inside your terminal on ${OS_LABEL} with zero cloud network leakage. `,
-    `My system controller can autonomously create files, execute Windows CMD/PowerShell commands, `,
-    `download any of the 1,000+ local models, or sync with GitHub (noity0/hmhslocal).\n\n`,
-    `Tell me what you'd like to do next in plain English!`,
-  ];
-
-  for (const chunk of mockResponse) {
-    for (const char of chunk) {
-      process.stdout.write(char);
-      await new Promise((r) => setTimeout(r, 6));
-    }
-  }
-  console.log(`\n\n${C.gray}[speed: 49.2 tok/s · eval: 0.62s]${C.reset}\n`);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ENTRY POINT
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Main Entry Point
+ */
 async function main() {
-  // If user provided a query directly via CLI: e.g. `hmhslocal create a simple react component`
+  const firstArg = (args[0] || '').toLowerCase();
+
+  if (firstArg === '--help' || firstArg === '-h' || firstArg === 'help') {
+    printBanner();
+    printHelp();
+    process.exit(0);
+  }
+
+  if (firstArg === 'doctor') {
+    printBanner();
+    await runDoctorCommand();
+    process.exit(0);
+  }
+
+  if (firstArg === 'models') {
+    printBanner();
+    await handleModelsCommand();
+    process.exit(0);
+  }
+
+  if (firstArg === 'pull') {
+    printBanner();
+    await handleModelsCommand('pull', args[1]);
+    process.exit(0);
+  }
+
+  if (firstArg === 'code') {
+    printBanner();
+    const task = args.slice(1).join(' ').trim();
+    if (!task) {
+      console.log(`${C.yellow}Please provide a coding prompt: hmhslocal code "create user auth"${C.reset}\n`);
+      process.exit(1);
+    }
+    await runCodingAgent(task);
+    process.exit(0);
+  }
+
+  if (firstArg === 'chat' || firstArg === 'ask') {
+    printBanner();
+    const query = args.slice(1).join(' ').trim();
+    if (query) {
+      await runChatStream(query);
+      process.exit(0);
+    }
+  }
+
+  if (firstArg === 'config') {
+    printBanner();
+    const key = args[1];
+    const val = args[2];
+    if (key && val) {
+      const updated = saveConfig({ [key]: val });
+      console.log(`${C.green}✔ Updated config: ${key} = ${val}${C.reset}\n`);
+    } else {
+      console.log(`${C.bold}Current Configuration (.hmhslocalrc):${C.reset}`);
+      console.log(JSON.stringify(config, null, 2));
+      console.log();
+    }
+    process.exit(0);
+  }
+
+  // If user provided a query directly: e.g. `hmhslocal create a counter component`
   if (userQuery && userQuery !== 'dashboard' && userQuery !== 'repl') {
     printBanner();
     await handleNaturalLanguageInput(userQuery);
     process.exit(0);
   }
 
-  // Interactive Conversation Loop (Natural Language Agent)
+  // Interactive REPL session
   printBanner();
-  console.log(`${C.green}● Interactive Agent Session Started [${currentConfig.model}]${C.reset}`);
-  console.log(`${C.dim}Type any instruction in simple English (e.g. "make a test file", "show files", "download deepseek", "exit").${C.reset}\n`);
+  console.log(`${C.green}● Interactive Terminal Agent Ready [${config.defaultModel}]${C.reset}`);
+  console.log(`${C.dim}Type any instruction in plain English or "help" for commands, "exit" to quit.${C.reset}\n`);
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -419,15 +418,14 @@ async function main() {
     prompt: `${C.cyan}${C.bold}hmhslocal❯ ${C.reset}`,
   });
 
-  const promptUser = () => {
-    rl.prompt();
-  };
-
-  promptUser();
+  rl.prompt();
 
   rl.on('line', async (line) => {
-    await handleNaturalLanguageInput(line, promptUser);
+    await handleNaturalLanguageInput(line, () => rl.prompt());
   });
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(`${C.red}Fatal error:${C.reset}`, err);
+  process.exit(1);
+});

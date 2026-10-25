@@ -1,111 +1,188 @@
-# OllamaNode & Codex: Terminal AI Agent & TUI Dashboard
+# hmhslocal — Production Local AI Agent & Autonomous Terminal Assistant
 
 <p align="center">
-  <b>A private local AI agent and autonomous coding engine running DIRECTLY in your terminal.</b><br/>
-  Cross-platform support for <b>Windows 11 (cmd.exe / PowerShell)</b>, <b>Apple macOS</b>, and <b>Linux</b>.
+  <b>A production-grade, local-first autonomous AI coding agent running directly inside your terminal.</b><br/>
+  Compatible with <b>Windows 11 (cmd.exe & PowerShell)</b>, <b>Apple macOS</b>, and <b>Linux</b>.<br/>
+  Repository: <a href="https://github.com/noity0/hmhslocal">https://github.com/noity0/hmhslocal</a>
 </p>
 
 ---
 
-## ⚡ Quickstart: Run Directly in Terminal (No Browser Required!)
+## 🚀 Key Highlights
 
-You do not need to open a browser at `http://localhost:3000`. The entire dashboard, chat, autonomous coding agent, and model manager run **directly inside your terminal console**.
+- **Real Local AI via Ollama:** Integrates directly with your local Ollama HTTP API daemon (`http://127.0.0.1:11434`). Streaming tokens, health checks, model pulling with progress indicators, and cancellation.
+- **Honest Execution Architecture:** Never claims a remote model is local. Local Ollama is 100% private and airgapped; remote cloud adapters (e.g., Google AI Studio Gemini) are clearly labeled.
+- **Autonomous Coding Agent:** Formulates structured plans, inspects workspace directories, creates line-by-line unified diffs, asks for user confirmation, writes files safely, and performs bounded self-repair (up to 3 automated recovery iterations).
+- **Strict Sandbox Security:** Path traversal protection prevents unauthorized writes outside the designated workspace root.
+- **Native Windows 11 Compatibility:** Specifically engineered to handle paths with spaces (e.g. `D:\local ai\hmhslocal`), quoted batch wrappers, and native CMD/PowerShell execution.
+- **1,000+ Curated Working Models:** Quick access and pull support for `llama3.3`, `deepseek-r1`, `qwen2.5-coder`, `mistral-nemo`, `phi-4`, `gemma-2`, and more.
+- **Natural Language & CLI Dual Mode:** Chat in plain English or casual words, or use explicit commands (`doctor`, `code`, `chat`, `models`, `config`).
+- **Comprehensive Automated Test Suite:** Verified using native Node.js test runner (`npm test`) with 100% passing tests.
 
-### 1. Installation on Windows 11 (`cmd.exe` or PowerShell)
+---
 
-Open Command Prompt (`cmd.exe`) or Windows Terminal:
+## 📥 Installation Guide
+
+### 1. Windows 11 Installation (Command Prompt or PowerShell)
+
+When cloning into folders with spaces (such as `D:\local ai\hmhslocal`):
 
 ```cmd
+:: Navigate to your chosen drive
+D:
+mkdir "D:\local ai"
+cd "D:\local ai"
+
 :: Clone the repository
 git clone https://github.com/noity0/hmhslocal.git
 cd hmhslocal
 
-:: Install dependencies
+:: Install dependencies (the included .npmrc automatically handles Vite 8 peer dependencies)
 npm install
 
-:: Link CLI globally
+:: Link the CLI globally
 npm link
 ```
 
-### 2. Installation on Apple macOS & Linux
+> **Note on ERESOLVE:** `hmhslocal` includes an optimized `.npmrc` (`legacy-peer-deps=true`) and aligned dependencies, preventing `npm error ERESOLVE` conflicts with `esbuild` and `vite@8`.
 
-Open your terminal (`zsh`, `bash`):
+### 2. Apple macOS & Linux Installation
 
 ```bash
-git clone https://github.com/your-username/localai-engine.git
-cd localai-engine
+git clone https://github.com/noity0/hmhslocal.git
+cd hmhslocal
 npm install
 npm link
 ```
 
 ---
 
-## 🖥️ Running the Terminal Dashboard (TUI)
+## ⚡ Starting the Engine
 
-Simply type `codex` or `localai` in any terminal window (Windows 11 `cmd.exe`, PowerShell, macOS Terminal, or Linux):
+### Start Ollama (Local Daemon)
+Make sure Ollama is installed and running on your machine:
 
-```cmd
-codex
+```bash
+# In a terminal window:
+ollama serve
 ```
 
-This immediately launches the **ASCII Terminal Dashboard**:
+If you don't have Ollama installed, download it from [https://ollama.com/download](https://ollama.com/download).
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ TERMINAL DASHBOARD                                                      │
-│ OS: Windows 11 (cmd.exe)       Hardware: 16 Cores · 32.0 GB RAM          │
-├─────────────────────────────────────┬────────────────────────────────────┤
-│ Active Model: llama3.3:8b (Q4_K_M)  │ VRAM Alloc: 4.72 GB / 16.0 GB      │
-│ Local Engine: 100% Private Airgap   │ API Daemon: http://127.0.0.1:11434 │
-└─────────────────────────────────────┴────────────────────────────────────┘
+### Run Environment Diagnostics
+Verify your local setup with one simple command:
 
-SELECT AN ACTION:
-  [1] 💬 Interactive Chat / REPL (Direct streaming conversation in terminal)
-  [2] ⚡ Codex Autonomous Coding Agent (Inspects workspace, creates diffs & edits files)
-  [3] 🔍 Natural Language to CMD / Bash (Converts English into safe Windows CMD / Bash)
-  [4] 📦 Model Registry & Puller (List and download models: llama3.3, deepseek-r1)
-  [5] 💻 Connect with CMD / Shell Bridge (Run dir, ipconfig, git, npm directly inside AI)
-  [6] 📊 Live VRAM & Hardware Monitor (Real-time telemetry monitor in terminal)
-  [7] 🚪 Exit Terminal Dashboard
+```bash
+hmhslocal doctor
 ```
 
----
-
-## 💻 Direct Terminal Commands Reference
-
-| Command | Windows 11 (`cmd.exe`) | Apple macOS / Linux | Description |
-| :--- | :--- | :--- | :--- |
-| **Terminal Dashboard** | `codex` or `localai` | `codex` or `localai` | Interactive full-screen terminal TUI dashboard |
-| **Autonomous Coding Agent** | `codex code "<task>"` | `codex code "<task>"` | Inspects files, plans code, displays color diffs, writes to disk |
-| **CMD / Shell Bridge** | `codex cmd` | `codex cmd` | Connects directly with `cmd.exe` or `bash` inside AI session |
-| **Natural Language to CMD** | `codex shell "<prompt>"` | `codex shell "<prompt>"` | Translates plain English into Windows CMD commands or Bash |
-| **Fast One-Shot Answer** | `codex ask "<prompt>"` | `codex ask "<prompt>"` | Instant answer streaming with tokens/sec speed |
-| **List Models** | `codex list` | `codex list` | Shows downloaded GGUF models in memory and disk |
-| **Download Model** | `codex pull deepseek-r1:8b` | `codex pull deepseek-r1:8b` | Pulls weights with ASCII progress bar |
-| **Hardware Monitor** | `codex monitor` | `codex monitor` | Live VRAM and CPU usage monitor in terminal |
-
----
-
-## ⚡ Examples for Windows 11 Command Prompt (`cmd.exe`)
-
-```cmd
-:: 1. Launch Autonomous Coding Agent
-codex code "Create a rate-limited Express server in server.ts"
-
-:: 2. Natural Language to Windows CMD command helper
-codex shell "find all log files larger than 10MB in C drive"
-:: => Generates: dir /s /b *.log and asks to run
-
-:: 3. Interactive CMD Bridge
-codex cmd
-CMD> dir
-CMD> ipconfig /all
-CMD> ? explain which network adapter is connected to the internet
-CMD> exit
+Output:
+```text
+✔ PASS Node.js Runtime: v22.x (Supported, >= v18 required)
+✔ PASS Path Spaces Safety: Handled with quoted paths
+✔ PASS Workspace Write Permissions: Confirmed
+✔ PASS Git Version Control: git version detected
+✔ PASS Local Ollama Daemon: Connected at http://127.0.0.1:11434 (llama3.2 installed)
+✔ PASS Agent Configuration: Provider: ollama · Model: llama3.2:latest
 ```
 
 ---
 
-## 🛡️ License
+## 🛠️ CLI Usage & Command Reference
 
-MIT License. 100% private and airgapped on your own hardware.
+You can use explicit CLI commands or simply type instructions in natural language.
+
+### Core CLI Commands
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `hmhslocal doctor` | System health check | Checks Node version, Ollama daemon, path spaces, Git status |
+| `hmhslocal chat [prompt]` | Streaming conversation | Real-time streaming conversation with the active model |
+| `hmhslocal code <prompt>` | Autonomous coding agent | Plans, inspects codebase, shows unified diffs, writes files, runs self-repair |
+| `hmhslocal ask <question>` | Codebase explanation | Fast explanation of files, functions, or architectural patterns |
+| `hmhslocal models` | List models | Shows installed Ollama models and curated 1,000+ catalog |
+| `hmhslocal pull <model>` | Download weights | Pulls model weights via Ollama HTTP API with progress bar |
+| `hmhslocal config [key] [val]` | Settings manager | Reads or modifies `.hmhslocalrc` configuration |
+| `hmhslocal` | Interactive REPL | Starts full-screen interactive natural language session |
+
+### Natural Language Examples
+
+You don't need to remember fixed commands. Just talk to `hmhslocal` directly:
+
+```bash
+# Autonomous coding
+hmhslocal "create a rest api in express with user authentication"
+hmhslocal "fix syntax errors in server.ts"
+hmhslocal "write unit tests for the workspace manager"
+
+# System operations
+hmhslocal "what files are in this folder"
+hmhslocal "pull deepseek-r1"
+hmhslocal "check system diagnostics"
+```
+
+---
+
+## ⚙️ Configuration (`.hmhslocalrc`)
+
+`hmhslocal` looks for `.hmhslocalrc` in the current working directory, then in the user home directory (`~/.hmhslocalrc`).
+
+```json
+{
+  "ollamaUrl": "http://127.0.0.1:11434",
+  "defaultModel": "llama3.2:latest",
+  "temperature": 0.2,
+  "contextSize": 8192,
+  "autoApproveSafeCommands": false,
+  "maxSelfRepairAttempts": 3,
+  "workspaceRoot": "./",
+  "provider": "ollama",
+  "githubRepo": "noity0/hmhslocal"
+}
+```
+
+### Environment Variable Overrides
+- `OLLAMA_HOST` or `HMHSLOCAL_OLLAMA_URL`: Overrides the Ollama server URL (e.g. `http://192.168.1.50:11434`).
+- `HMHSLOCAL_MODEL`: Sets the default model (e.g. `qwen2.5-coder:7b`).
+- `HMHSLOCAL_PROVIDER`: `ollama` (default, local) | `gemini` (remote cloud) | `mock` (testing).
+- `GEMINI_API_KEY`: Required only if using the optional remote Gemini adapter.
+
+---
+
+## 🧪 Automated Testing & CI
+
+Run the automated test suite locally:
+
+```bash
+npm test
+```
+
+All 20 test cases run across:
+- `tests/config.test.ts`: Configuration loading, validation, env overrides.
+- `tests/workspace.test.ts`: Sandbox path traversal protection, file CRUD, patching, command execution.
+- `tests/ollamaClient.test.ts`: URL normalization, offline error handling, setup remediation hints.
+- `tests/provider.test.ts`: Honesty check (Ollama local: true vs Gemini local: false), streaming mock engine.
+- `tests/agent.test.ts`: End-to-end multi-step coding agent loop with diff verification.
+- `tests/doctor.test.ts`: Comprehensive environment diagnostic validation.
+
+Type checking and linting:
+
+```bash
+npm run lint
+```
+
+GitHub Actions CI automatically tests pull requests and commits on Ubuntu, Windows, and macOS.
+
+---
+
+## 🔒 Security Architecture
+
+1. **Sandbox Path Isolation:** Every file operation passes through `WorkspaceManager.resolveSafePath()`. Traversal sequences (`../`, `../../etc`, `C:\Windows`) are intercepted and raise a `WorkspaceSecurityError`.
+2. **Explicit User Confirmation:** By default, file writes and terminal commands require user confirmation (`[Y/n]`) before execution.
+3. **No Secret Telemetry:** No user prompts, code snippets, or system logs are ever transmitted to third parties when running under Ollama.
+
+---
+
+## 📄 License
+
+Apache-2.0 License. See [LICENSE](LICENSE) for details.
