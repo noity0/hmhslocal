@@ -49,7 +49,7 @@ export async function runSimpleTerminalAction(
     return true;
   }
 
-  if (/\b(network ports|check ports|list ports|open ports|netstat)\b/.test(p) || (/\b(ipconfig|ip address|my ip|network ip)\b/.test(p) && /\b(port|ports|network)\b/.test(p))) {
+  if (/\b(network ports|check ports|list ports|open ports|netstat)\b/.test(p) || /\b(ipconfig|ip address|my ip|network ip|check network)\b/.test(p)) {
     const windows = os.platform() === 'win32';
     const ipCommand = windows ? 'ipconfig' : 'ip addr';
     const portsCommand = windows ? 'netstat -ano' : 'ss -ltnup';
