@@ -1,7 +1,7 @@
 {
   "name": "hmhslocal",
   "version": "1.0.0",
-  "description": "hmhslocal - Autonomous Local AI System, 1000+ Models, CMD & PowerShell Controller",
+  "description": "hmhslocal - Terminal-only local-first AI assistant and coding agent",
   "bin": {
     "hmhslocal": "./bin/hmhslocal.js",
     "codex": "./bin/hmhslocal.js",
@@ -10,14 +10,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx bin/hmhslocal.js",
-    "dev:web": "tsx server.ts",
-    "build": "vite build",
     "start": "tsx bin/hmhslocal.js",
-    "start:web": "tsx server.ts",
     "cli": "tsx bin/hmhslocal.js",
     "tui": "tsx bin/hmhslocal.js",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "doctor": "tsx bin/hmhslocal.js doctor",
     "test": "tsx --test tests/**/*.test.ts",
     "lint": "tsc --noEmit"
   },
