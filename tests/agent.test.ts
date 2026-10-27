@@ -47,7 +47,6 @@ describe('Autonomous AI Coding Agent', () => {
   });
 
   it('executes coding task end-to-end and writes files into workspace', async () => {
-    // Configure mock responses for plan and code generation
     mockProvider.setResponse(
       'Analyze the user',
       '1. Create utility module\n2. Export calculate function\n3. Verify output'
@@ -78,7 +77,7 @@ describe('Autonomous AI Coding Agent', () => {
 
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.filesChanged.length, 1);
-    assert.strictEqual(result.filesChanged[0].filePath, path.join('src', 'math.ts'));
+    assert.strictEqual(path.normalize(result.filesChanged[0].filePath), path.join('src', 'math.ts'));
     assert.ok(ws.fileExists('src/math.ts'));
     assert.strictEqual(
       ws.readFile('src/math.ts'),
