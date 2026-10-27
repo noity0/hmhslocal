@@ -20,6 +20,7 @@ import { WorkspaceManager } from '../src/core/workspace.ts';
 import { getAIProvider } from '../src/core/provider.ts';
 import { CodingAgent } from '../src/core/agent.ts';
 import { EnvironmentDoctor } from '../src/core/doctor.ts';
+import { runSimpleTerminalAction } from '../src/core/terminalActions.ts';
 
 const args = process.argv.slice(2);
 const userQuery = args.join(' ').trim();
@@ -268,6 +269,13 @@ async function handleModelsCommand(actionArg, modelArg) {
 async function handleNaturalLanguageInput(promptText, onDone) {
   const p = promptText.trim().toLowerCase();
   if (!p) {
+    if (onDone) onDone();
+    return;
+  }
+
+  // Handle common everyday requests deterministically before asking the AI model.
+  // This keeps simple system tasks fast and entirely inside the terminal.
+  if (await runSimpleTerminalAction(promptText, workspace, promptConfirm)) {
     if (onDone) onDone();
     return;
   }
