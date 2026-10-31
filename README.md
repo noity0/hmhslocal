@@ -1,100 +1,127 @@
-# hmhslocal — Terminal-only Local AI Assistant
+# hmhslocal — Local-First Terminal AI Assistant & Coding Agent
 
-hmhslocal is a CLI-first AI assistant and coding agent for Windows CMD/PowerShell, macOS, and Linux. The normal startup path runs in the terminal; it does not open a browser or start a web dashboard.
+[![GitHub stars](https://img.shields.io/github/stars/noity0/hmhslocal?style=flat-square)](https://github.com/noity0/hmhslocal/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/noity0/hmhslocal?style=flat-square)](https://github.com/noity0/hmhslocal/issues)
+[![Last commit](https://img.shields.io/github/last-commit/noity0/hmhslocal?style=flat-square)](https://github.com/noity0/hmhslocal/commits/main)
+
+> A terminal-only AI assistant and coding agent for Windows, macOS, and Linux, with local Ollama support and an optional cloud AI provider.
+
+`hmhslocal` is a command-line-first developer assistant. It runs in CMD or PowerShell on Windows and in a terminal on macOS/Linux. Its normal startup path is the terminal interface; it does not launch a browser dashboard.
 
 ## What it can do
 
-- Chat with a local Ollama model, with streaming responses.
-- Accept ordinary language such as `hi`, `show me all files in this folder`, `check network ports and IP`, and `push latest changes to GitHub`.
-- List workspace files, show the current directory, check IP/network ports, and inspect Git status.
-- Generate and modify project files through the coding agent, show diffs, and ask before applying changes.
-- List local Ollama models, download a model, and run diagnostics.
-- Keep potentially destructive or publishing actions behind confirmation and avoid automatically committing all uncommitted files.
+- Chat with a local Ollama model, including streaming responses.
+- Inspect files and folders within the configured workspace.
+- Read Git status and help prepare selected changes for publishing.
+- Generate and edit project files through a coding workflow.
+- Show proposed changes for review before applying them.
+- List local Ollama models and run environment diagnostics.
+- Handle natural-language requests for common development tasks.
+
+Available actions depend on the configured provider, local permissions, and installed tools. Review proposed file changes and commands before approving them.
+
+## Privacy and provider modes
+
+**Local mode:** When configured to use Ollama, model inference is sent to the local Ollama service, normally `http://127.0.0.1:11434`.
+
+**Cloud mode:** The optional Gemini provider sends prompts to Google's cloud API. This is not local-only processing. Review the provider's privacy terms before sending private source code or data.
+
+## Requirements
+
+- Node.js 22 LTS recommended
+- npm
+- Git
+- Ollama for local model inference
+- A compatible local model downloaded in Ollama
 
 ## Windows setup
 
-Open CMD or PowerShell:
+Clone the project:
 
-```cmd
-cd /d "D:\\local ai\\hmhslocal"
-git pull --ff-only origin main
+```powershell
+git clone https://github.com/noity0/hmhslocal.git
+Set-Location hmhslocal
 npm install
-npm run dev
 ```
 
-The default `npm run dev`, `npm start`, `npm run cli`, and `npm run tui` commands all start the terminal interface. Web-server startup scripts are intentionally not exposed as package scripts.
+Install and start Ollama separately, then download a model:
 
-## Examples
-
-Inside the hmhslocal prompt, type naturally:
-
-```text
-hi
-show me all files in this folder
-show my current directory
-check network ports and IP
-show git status
-download deepseek-r1
-create an Express API with a health endpoint
-fix the bug in src/server.ts
-push latest changes to GitHub
-```
-
-You can also run one-off requests from CMD/PowerShell:
-
-```cmd
-npm run dev -- "show me all files in this folder"
-npm run dev -- "check network ports and IP"
-npm run dev -- doctor
-```
-
-For Git publishing, hmhslocal checks the working tree first. If files are uncommitted, it will ask you to review and commit the intended files rather than automatically staging everything. A push of committed changes requires confirmation.
-
-## Local AI setup
-
-Install Ollama and download a model, for example:
-
-```cmd
+```powershell
 ollama pull llama3.2
 ```
 
-Then start hmhslocal:
+Make sure the Ollama service is running. The default local API endpoint is:
 
-```cmd
+```text
+http://127.0.0.1:11434
+```
+
+Start the terminal assistant:
+
+```powershell
 npm run dev
 ```
 
-The CLI talks to the Ollama service through its local API (normally `http://127.0.0.1:11434`). This is an internal local model connection, not a browser UI or hmhslocal web dashboard. Requests stay local when the configured provider is Ollama. The optional Gemini provider uses a remote cloud API and is not local-only.
+## Examples
 
-## Useful commands
+Inside the hmhslocal prompt, try requests such as:
+
+```text
+help
+show my current directory
+show git status
+list files in this workspace
+list local models
+download a model using Ollama
+explain this project structure
+review a proposed code change
+```
+
+You can also pass a one-off request from PowerShell:
+
+```powershell
+npm run dev -- "show git status"
+npm run dev -- "list files in this workspace"
+npm run doctor
+```
+
+## Available commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start terminal REPL |
-| `npm run doctor` | Check environment and Ollama |
-| `npm test` | Run tests |
+| `npm run dev` | Start the terminal assistant |
+| `npm start` | Start the terminal assistant |
+| `npm run cli` | Start the terminal interface |
+| `npm run tui` | Start the terminal interface |
+| `npm run doctor` | Run environment and Ollama diagnostics |
+| `npm test` | Run automated tests |
 | `npm run lint` | Run TypeScript checks |
-| `models` | List local models |
-| `pull deepseek-r1` | Download a model |
-| `code <task>` | Run the coding agent |
-| `help` | Show CLI help |
-| `exit` | Quit the REPL |
 
-## Safety notes
+Inside the assistant, use `help` to view the commands supported by the current version.
 
-- File edits are constrained to the configured workspace root.
-- Coding-agent file changes are shown for review and require confirmation by default.
-- Terminal commands are subject to safety checks and timeouts.
-- Git push requires confirmation. Uncommitted files are not automatically committed.
-- Use Ollama for local inference; do not set the provider to Gemini if you require local-only model inference.
+## Git workflow and safety
 
-## Tests
+The project is designed to request review/confirmation for file changes and Git publishing actions. Inspect diffs before accepting them. Do not approve commands or edits you do not understand, and keep important work backed up.
 
-```cmd
-npm test
-npm run lint
-```
+## Troubleshooting
+
+- **Ollama is not detected:** Confirm Ollama is installed and the service is running; then run `ollama list`.
+- **No model is available:** Download a compatible model with `ollama pull <model-name>`.
+- **Node command not found:** Install Node.js 22 LTS and reopen the terminal.
+- **Dependency errors:** Run `npm install` from the repository root.
+- **Tests fail:** Run `npm test` and review the first reported error.
+
+## Contributing
+
+Bug reports, test cases, provider improvements, Windows compatibility fixes, and documentation updates are welcome.
+
+- [Issues](https://github.com/noity0/hmhslocal/issues)
+- [Source code](https://github.com/noity0/hmhslocal)
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+This repository includes an Apache-2.0 license. See [LICENSE](LICENSE) for the full terms.
+
+## Search terms
+
+Local AI assistant, terminal AI, coding agent, Ollama, local LLM, command-line assistant, Windows PowerShell AI, developer tools, Gemini API, Node.js, TypeScript, HMHS.
